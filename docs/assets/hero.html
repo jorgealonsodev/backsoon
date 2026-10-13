@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- Source of docs/assets/hero.png (1280x640, rendered at 2x with Chromium).
+     Regenerate after editing: open this file at a 1280x640 viewport, deviceScaleFactor 2,
+     and screenshot the full viewport. No external fonts or assets. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>backsoon</title>
+<style>
+  :root {
+    --bg: #f9fafb; --surface: #ffffff; --surface-2: #f3f4f6; --border: #e5e7eb;
+    --text: #111827; --muted: #5b6472; --chip: #eef0f3; --chip-text: #1f2937;
+    --accent: #c2410c; --accent-text: #9a3412; --accent-tint: #fff3ea; --accent-edge: #f4b48a;
+    --line: #f76707; --bad: #b91c1c; --bad-bg: #fee2e2;
+    --ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--ui);
+    border-top: 6px solid var(--line);
+    display: grid; grid-template-columns: 500px 1fr; gap: 48px; align-items: center;
+    padding: 0 56px 6px 72px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 36px; }
+  .brand svg { width: 52px; height: 52px; }
+  .brand span { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; }
+  h1 { font-size: 40px; line-height: 1.12; font-weight: 700; letter-spacing: -0.025em; margin-bottom: 20px; text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--accent-text); }
+  .lede { font-size: 19px; line-height: 1.5; color: var(--muted); max-width: 26em; margin-bottom: 28px; }
+  .order { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 6px;
+          background: var(--chip); color: var(--chip-text); font: 500 16px/1 var(--mono); }
+  .chip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .then { color: var(--muted); font-size: 18px; }
+
+  .stage { position: relative; height: 470px; }
+  .win { position: absolute; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+         box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 12px 32px -8px rgba(15,23,42,.18); }
+  .bar { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .dots { display: flex; gap: 6px; } .dots i { width: 10px; height: 10px; border-radius: 50%; background: #d1d5db; display: block; }
+  .url { flex: 1; height: 24px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);
+         display: flex; align-items: center; padding: 0 10px; font: 13px/1 var(--mono); color: var(--muted); }
+  .status { font: 600 12px/1 var(--mono); padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
+
+  .before { left: 0; top: 0; width: 330px; height: 214px; }
+  .before .status { background: var(--bad-bg); color: var(--bad); }
+  .before .body { display: grid; place-items: center; height: 130px; margin-top: 4px; text-align: center; font-family: "Times New Roman", serif; color: #111; }
+  .before .body b { font-size: 22px; display: block; margin-bottom: 10px; }
+  .before .body hr { width: 250px; margin: 0 auto 8px; border: 0; border-top: 1px solid #9ca3af; }
+  .before .body small { font-size: 14px; color: #444; }
+  .before .tag { position: absolute; left: 14px; bottom: 14px; font: 600 12px/1 var(--ui); color: var(--bad); letter-spacing: .04em; text-transform: uppercase; }
+
+  .after { right: 0; top: 150px; width: 420px; height: 310px; border-top: 3px solid var(--line); }
+  .after .status { background: var(--accent-tint); color: var(--accent-text); border: 1px solid var(--accent-edge); }
+  .page { height: 267px; display: grid; place-items: center; text-align: center; padding: 18px 40px;
+          font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; }
+  .page .app { color: #4a4a4a; font-size: 16px; margin-bottom: 6px; }
+  .page h2 { font-size: 26px; line-height: 1.2; margin-bottom: 12px; }
+  .page p { margin-bottom: 10px; }
+  .page .auto { color: #4a4a4a; font-size: 13px; }
+  .page a { color: #0b5cad; font-weight: 600; }
+
+  .arrow { position: absolute; left: 70px; top: 226px; width: 120px; height: 100px; }
+  .arrow path { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .note { position: absolute; left: 0; top: 336px; width: 170px; font-size: 15px; line-height: 1.4; color: var(--muted); }
+  .note b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+  <section>
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#c2410c"/><path d="M8.5 8.5 6.5 10.5l2 2M6.5 10.5H13a3.5 3.5 0 0 1 0 7h-2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>backsoon</span>
+    </div>
+    <h1>Redeploying an app? Visitors get <em>its own maintenance page</em>, not a 502.</h1>
+    <p class="lede">One global snippet for Nginx Proxy Manager, a static nginx and a small admin panel. Traffic returns to the app on its own.</p>
+    <div class="order" aria-label="Page selection order">
+      <span class="chip"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.7 5.6 3.7 9s-1.1 6.4-3.7 9c-2.6-2.6-3.7-5.6-3.7-9S9.4 5.6 12 3Z"/></svg>domain</span>
+      <span class="then">then</span>
+      <span class="chip"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></svg>service:port</span>
+      <span class="then">then</span>
+      <span class="chip"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9"/></svg>default</span>
+    </div>
+  </section>
+
+  <section class="stage" aria-hidden="true">
+    <div class="win before">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">shop.example.com</span><span class="status">502</span></div>
+      <div class="body"><div><b>502 Bad Gateway</b><hr><small>openresty</small></div></div>
+      <span class="tag">Without backsoon</span>
+    </div>
+
+    <svg class="arrow" viewBox="0 0 120 100"><path d="M8 4c2 46 36 76 96 80M90 72l14 12-16 9"/></svg>
+    <p class="note"><b>Same URL, no redirect.</b> 503 with Retry-After; the page refreshes until the app is back.</p>
+
+    <div class="win after">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">shop.example.com</span><span class="status">503 · Retry-After: 10</span></div>
+      <div class="page"><div>
+        <p class="app">Acme Shop</p>
+        <h2>Volvemos en breve</h2>
+        <p>Estamos actualizando la tienda. Vuelve en unos minutos.</p>
+        <p class="auto">Esta página se actualiza sola cada 10 segundos.</p>
+        <p><a href="#">Reintentar ahora</a></p>
+      </div></div>
+    </div>
+  </section>
+</body>
+</html>
