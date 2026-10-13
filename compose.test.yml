@@ -1,0 +1,107 @@
+# backsoon local test harness (NOT for production). Drive it with test/harness.sh.
+# Starts a real NPM plus two traefik/whoami apps on private networks; only NPM
+# publishes ports, and only on loopback. Every resource lives under the
+# BACKSOON_TEST_PROJECT project (default backsoon-e2e) and carries the label
+# com.backsoon.test=true.
+name: ${BACKSOON_TEST_PROJECT:-backsoon-e2e}
+
+x-test-label: &test-label
+  com.backsoon.test: "true"
+
+services:
+  npm:
+    image: jc21/nginx-proxy-manager:2.16.0
+    environment:
+      DISABLE_IPV6: "true"
+    ports:
+      - "127.0.0.1:${BACKSOON_TEST_HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${BACKSOON_TEST_ADMIN_PORT:-8181}:81"
+    volumes:
+      - npm-data:/data
+      - npm-letsencrypt:/etc/letsencrypt
+      # Separate writable volume so T3 can install/reset server_proxy.conf.
+      - npm-custom:/data/nginx/custom
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:81/api/ | grep -q '\"status\":\"OK\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    stop_grace_period: 10s
+    networks: [edge, testnet]
+    labels: *test-label
+
+  # traefik/whoami is a scratch image (no shell, no healthcheck binary): the
+  # harness probes it from inside the npm container instead.
+  app1:
+    image: traefik/whoami:v1.12.0
+    command: ["--name", "app1"]
+    networks: [testnet]
+    labels: *test-label
+
+  app2:
+    image: traefik/whoami:v1.12.0
+    command: ["--name", "app2"]
+    networks: [testnet]
+    labels: *test-label
+
+  # Optional (profile "backsoon"): needs nginx/default.conf.template from the
+  # service unit (override the path with BACKSOON_TEST_TEMPLATE). It serves the
+  # test "pages" volume read-only; no published ports.
+  backsoon:
+    profiles: [backsoon]
+    image: nginx:1.30.5-alpine-slim
+    environment:
+      BACKSOON_REFRESH: "${BACKSOON_REFRESH:-10}"
+    volumes:
+      - type: bind
+        source: ${BACKSOON_TEST_TEMPLATE:-./nginx/default.conf.template}
+        target: /etc/nginx/templates/default.conf.template
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: pages
+        target: /pages
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [testnet]
+    labels: *test-label
+
+  # Fixture installer (profile "tools"): the only writer of the pages volume.
+  # Run via `sh test/harness.sh fixtures`.
+  fixtures:
+    profiles: [tools]
+    image: jc21/nginx-proxy-manager:2.16.0
+    entrypoint: ["sh", "-c"]
+    command:
+      - find /pages -mindepth 1 -delete && cp -R /fixtures/pages/. /pages/ && chmod -R a+rX /pages
+    volumes:
+      - pages:/pages
+      - ./test/fixtures:/fixtures:ro
+    network_mode: none
+    labels: *test-label
+
+networks:
+  # NPM-only bridge: required because Docker cannot publish ports from an
+  # internal network. The apps are never attached to it.
+  edge:
+    labels: *test-label
+  # Private network for NPM, apps and backsoon: no route to the outside.
+  testnet:
+    internal: true
+    labels: *test-label
+
+volumes:
+  npm-data:
+    labels: *test-label
+  npm-letsencrypt:
+    labels: *test-label
+  npm-custom:
+    labels: *test-label
+  pages:
+    labels: *test-label

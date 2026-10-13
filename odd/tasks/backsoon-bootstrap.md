@@ -167,9 +167,9 @@ Manual browser/production checks are not represented as automated proof. The pan
 No authorization for publishing, merging, production deployment, or review consent.
 
 ## Tasks
-- T0 | S1,S10 | inline: initialize requirement baseline and ODD continuity; passive docs, no writer trigger | in_progress | commit: pending
-- T1 | S2–S6,S9,S10 | delegated: static service plus foundation (U0/U2); parallel unit disjoint from T2 and heavier than agent startup | pending | commit: pending
-- T2 | S7,S10 | delegated: real NPM harness (U1); parallel unit disjoint from T1 and heavier than agent startup | pending | commit: pending
+- T0 | S1,S10 | inline: initialize requirement baseline and ODD continuity; passive docs, no writer trigger | done | commit: 4495d711c6e368c4cbef0fd479558749c58b6dbe; git diff --cached --check passed
+- T1 | S2–S6,S9,S10 | delegated: static service plus foundation (U0/U2); parallel unit disjoint from T2 and heavier than agent startup | in_progress | commit: pending
+- T2 | S7,S10 | delegated: real NPM harness (U1); parallel unit disjoint from T1 and heavier than agent startup | in_progress | self-verification passed; parent structural spot check passed; independent verification/review pending; commit: pending
 - T3 | S2,S3,S8,S9 | inline: integrate NPM fallback (U3), full seam checks, independent verification and risk-gated native review | pending | commit: pending
 
 ## Log
@@ -188,3 +188,12 @@ Docker daemon 29.9.0, Compose v5.6.0, Go 1.26.9 are available. Repository has no
 Official nginx docs confirm error_page to URI changes non-GET/HEAD methods to GET; named locations preserve method. See https://nginx.org/en/docs/http/ngx_http_core_module.html.
 The nginx reference sample is not proof: validate headers, missing-default empty body, host/target validation, envsubst filtering, JSON, and NPM variables with real images.
 Review mode is on globally. After self-checks assess candidate risk; high/unassessable gets independent verification before native review. Consent is separate from commits. Slices: baseline → T1 service → T2 harness → T3 integration. No code-golf to fit 400 lines.
+
+### L4 — T2 progress and isolated port collision
+T2 worker reports pinned official jc21/nginx-proxy-manager:2.16.0 and traefik/whoami:v1.12.0, with initial-user API setup discovered from the image. This is progress, not completed U1 proof; parent will verify its final delivery. Parent ss confirms 127.0.0.1:8080 is occupied; 18080/18181 are free at this point. Preserve harness defaults while all local checks use BACKSOON_TEST_HTTP_PORT=18080 BACKSOON_TEST_ADMIN_PORT=18181. No unrelated container/network/data changes are authorized. T2 was steered accordingly. Scratch whoami health is probed through NPM, not shell execution inside whoami.
+
+### L5 — T1 progress and service/harness seam
+T1 reports official nginx:1.30.5-alpine-slim pulled with envsubst present and digest sha256:32463212baf0e7d91aded2e9b843a4f2b9e017804b8c9d5bae7b51dcef64389c. Public curl tests are being written before RED and implementation; no completion or GREEN evidence yet. Provisional default will be seeded by a one-shot backsoon-init service with the same image, preserving existing files; runtime backsoon remains a read-only consumer. Parent relayed the image/seeding contract to T2 and requested an isolated missing-default test unaffected by reseeding.
+
+### L6 — T2 delivered, verification gate still open
+Worker mv6rkn6f-3-tcd7 settled completed: U1 works with real NPM 2.16.0 and whoami 1.12.0 on 18080/18181; RED absent compose/script/refused curl, GREEN harness up plus both whoami hosts, bootstrap idempotency and drift correction; isolated project teardown passed. Parent ran compose config, shell syntax and git diff --check with exit 0. Actual T1 nginx not yet integrated. Native ASSESS could not assess ambient untracked files (explicit declaration required), so risk is unassessable and verification follows high; committed T2 range will isolate the candidate from T1's ongoing edits. T2 is not marked done before independent proof. Worker reported a leftover scratch directory outside repo after blocked cleanup; parent will not retry external deletion. Existing unrelated 8080 listener untouched. T2 slice is about 520 authored lines, a cohesive deploy/bootstrap/check unit; retain tests/docs rather than code-golf for advisory 400-line budget.
