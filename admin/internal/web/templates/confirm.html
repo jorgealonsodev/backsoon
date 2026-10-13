@@ -1,0 +1,66 @@
+{{define "dests"}}<ul class="chips">{{range .}}{{template "chip" .}}{{end}}</ul>{{end}}
+
+{{define "confirm"}}{{template "top" .}}
+<main id="main" class="container container-narrow" data-view="confirm-{{.Kind}}">
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+{{- if eq .Kind "warnings"}}
+<div class="card-header"><h1 class="card-title">Check this page before publishing</h1></div>
+<div class="card-body stack">
+<p>“{{.PageName}}” {{if .Edit}}will get new HTML{{else}}is ready to be created{{end}}, with the warnings below. backsoon pages should be self-contained, so confirm that this is intended.</p>
+<div class="alert alert-warning">{{template "icon" "warn"}}<ul class="plain">
+{{- range .Warnings}}
+<li><strong>Warning.</strong> {{.}}</li>
+{{- end}}
+</ul></div>
+{{- if .Dests}}
+<div><p class="label">Destinations</p>{{template "dests" .Dests}}</div>
+{{- end}}
+</div>
+<form class="card-footer actions" method="post" action="{{.Action}}">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="draft" value="{{.DraftID}}">
+<button class="btn btn-primary" type="submit" name="confirm" value="warnings">Publish anyway</button>
+<a class="btn" href="{{.BackHref}}">Back and edit</a>
+</form>
+{{- else if eq .Kind "move"}}
+<div class="card-header"><h1 class="card-title">Move destinations?</h1></div>
+<div class="card-body stack">
+<p>Each destination shows one page. Moving these to “{{.PageName}}” takes them away from the page that shows them now.</p>
+{{- range .Groups}}
+<div class="move-group">
+{{template "dests" .Dests}}
+<p class="sub">Now shown by “{{.OwnerName}}”.</p>
+{{- if .LeftEmpty}}
+<div class="alert alert-warning">{{template "icon" "warn"}}<div><strong>“{{.OwnerName}}” will be left with no destinations, so visitors will never see that page.</strong></div></div>
+{{- end}}
+</div>
+{{- end}}
+</div>
+<form class="card-footer actions" method="post" action="{{.Action}}">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="draft" value="{{.DraftID}}">
+<button class="btn btn-primary" type="submit" name="confirm" value="move">Move destinations</button>
+<a class="btn" href="{{.BackHref}}">Back and edit</a>
+</form>
+{{- else}}
+<div class="card-header"><h1 class="card-title">Delete “{{.PageName}}”?</h1></div>
+<div class="card-body stack">
+{{- if .Dests}}
+<p>These destinations will show the default page (“{{.DefaultName}}”) from the next request:</p>
+{{template "dests" .Dests}}
+{{- else}}
+<p>This page has no destinations, so no visitor sees a change.</p>
+{{- end}}
+<div class="alert alert-danger">{{template "icon" "alert"}}<div>The stored HTML of this page is deleted too. This cannot be undone.</div></div>
+</div>
+<form class="card-footer actions" method="post" action="{{.Action}}">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="confirm" value="true">
+<button class="btn btn-danger" type="submit">Delete page</button>
+<a class="btn" href="{{.BackHref}}">Keep page</a>
+</form>
+{{- end}}
+</div>
+</main>
+{{template "bottom" .}}{{end}}

@@ -1,0 +1,342 @@
+{
+  "title": "Nueva tirada: un panel actual",
+  "question": "Direcciones nuevas, contemporáneas y sin estética de época. Elige una, pide otra tirada u orienta la siguiente.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Sala de exposición",
+      "kicker": "THE ROLL",
+      "lineage": "gráfica de museos y galerías contemporáneas: cartelas, paredes blancas, un color de exposición",
+      "thesis": "Cada página es una obra colgada con su cartela: nombre, destinos y fecha, con aire y precisión de galería actual.",
+      "palette": [
+        "#f7f7f4",
+        "#121212",
+        "#2b3bff",
+        "#e5e5e0"
+      ],
+      "materials": [
+        "pared blanca mate",
+        "grotesca precisa",
+        "un azul eléctrico de exposición"
+      ],
+      "viewport": "Barra superior mínima; buscador grande «¿Qué página ve…?»; debajo, las páginas como obras con su miniatura de vista previa a escala fija y su cartela de destinos a la derecha.",
+      "risk": "Mucho espacio en blanco: con 1–10 páginas funciona, pero exige jerarquía tipográfica muy afinada para no parecer vacío.",
+      "raised": [
+        {
+          "from": "challenger-saville",
+          "raise": "Contención radical: sin bordes ni cajas, el espacio negativo separa."
+        },
+        {
+          "from": "challenger-botanical",
+          "raise": "Todas las vistas previas a la misma escala y marco, comparables de un vistazo."
+        },
+        {
+          "from": "challenger-jet-ticket",
+          "raise": "Los estados se marcan sobre la cartela (movido, sin destinos) y nada desaparece sin aviso."
+        },
+        {
+          "from": "challenger-emigre",
+          "raise": "La vista previa se muestra a dos tamaños: móvil y escritorio."
+        },
+        {
+          "from": "challenger-variable-type",
+          "raise": "La jerarquía sale sólo del contraste de escala y peso."
+        }
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "barra superior",
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          },
+          {
+            "label": "buscador",
+            "x": 0,
+            "y": 1,
+            "w": 12,
+            "h": 2,
+            "accent": true
+          },
+          {
+            "label": "miniatura",
+            "x": 0,
+            "y": 3,
+            "w": 5,
+            "h": 3
+          },
+          {
+            "label": "cartela y destinos",
+            "x": 5,
+            "y": 3,
+            "w": 7,
+            "h": 3
+          },
+          {
+            "label": "miniatura",
+            "x": 0,
+            "y": 6,
+            "w": 5,
+            "h": 3
+          },
+          {
+            "label": "cartela y destinos",
+            "x": 5,
+            "y": 6,
+            "w": 7,
+            "h": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Líneas de transporte",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "apps de transporte urbano actuales: cada línea con su color vivo",
+      "thesis": "Cada página tiene su propio color de línea; sus destinos son las paradas, y el buscador traza la ruta hasta la página que se verá.",
+      "palette": [
+        "#ffffff",
+        "#0d0f12",
+        "#ff5a1f",
+        "#7c3aed",
+        "#00b386"
+      ],
+      "materials": [
+        "chips de línea redondeados",
+        "colores planos vivos",
+        "tipografía sans actual"
+      ],
+      "viewport": "Barra superior; buscador con resultado en forma de ruta; listado de páginas como líneas de color con sus paradas.",
+      "risk": "Es la dirección que más se parecería a otras apps modernas; con muchas páginas los colores pueden competir.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "barra superior",
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          },
+          {
+            "label": "buscador + ruta",
+            "x": 0,
+            "y": 1,
+            "w": 12,
+            "h": 2,
+            "accent": true
+          },
+          {
+            "label": "líneas de páginas",
+            "x": 0,
+            "y": 3,
+            "w": 8,
+            "h": 7
+          },
+          {
+            "label": "vista previa",
+            "x": 8,
+            "y": 3,
+            "w": 4,
+            "h": 7
+          }
+        ]
+      }
+    },
+    {
+      "id": "challenger-zoo-map",
+      "label": "Mapa de colores planos",
+      "verdict": "competitive",
+      "lineage": "mapas ilustrados contemporáneos de color plano",
+      "thesis": "Cada página es una zona de color plano con bordes orgánicos; los controles son cápsulas de colores vivos.",
+      "palette": [
+        "#f5f1e4",
+        "#2c2e2a",
+        "#8ed462",
+        "#ff705d",
+        "#2ba0ff"
+      ],
+      "materials": [
+        "color plano sin textura",
+        "cápsulas",
+        "una sola grotesca"
+      ],
+      "viewport": "Una zona de color por página; cápsulas para acciones; el buscador ilumina la zona que gana.",
+      "case": "Muy actual y con carácter; pierde en claridad: las formas orgánicas complican leer destinos en una herramienta.",
+      "risk": "Puede parecer más una web de marca que una herramienta de trabajo.",
+      "hero": "https://impeccable.style/worlds/cards/aww2-zoo-gardens-guide-map-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/aww2-zoo-gardens-guide-map.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "barra superior",
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          },
+          {
+            "label": "zona página A",
+            "x": 0,
+            "y": 1,
+            "w": 7,
+            "h": 5,
+            "accent": true
+          },
+          {
+            "label": "zona página B",
+            "x": 7,
+            "y": 1,
+            "w": 5,
+            "h": 5
+          },
+          {
+            "label": "zona por defecto",
+            "x": 0,
+            "y": 6,
+            "w": 12,
+            "h": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "challenger-saville",
+      "label": "Catálogo de discográfica",
+      "verdict": "declined",
+      "lineage": "identidad de catálogo de sello discográfico",
+      "thesis": "Todo es una entrada de catálogo sobre negro mate.",
+      "palette": [
+        "#111111",
+        "#ffffff"
+      ],
+      "materials": [
+        "negro mate",
+        "líneas blancas"
+      ],
+      "viewport": "Índice numerado de páginas.",
+      "case": "Encaja mal: es una referencia de época y codifica los nombres en lugar de mostrarlos.",
+      "kept": "Contención radical y espacio negativo.",
+      "risk": "Críptico.",
+      "hero": "https://impeccable.style/worlds/cards/brand-identity-canon-saville-catalog-sleeve-hero.webp"
+    },
+    {
+      "id": "challenger-botanical",
+      "label": "Lámina botánica",
+      "verdict": "declined",
+      "lineage": "folios botánicos por estaciones",
+      "thesis": "Una planta a escala fija en cada lámina.",
+      "palette": [
+        "#f4ecd8",
+        "#3c6e3c",
+        "#b22222"
+      ],
+      "materials": [
+        "papel crema",
+        "filetes sepia"
+      ],
+      "viewport": "Láminas alineadas.",
+      "case": "Encaja mal: estética antigua, justo lo que pediste evitar.",
+      "kept": "Escala y marco idénticos para comparar.",
+      "risk": "Retro.",
+      "hero": "https://impeccable.style/worlds/cards/editorial-sequence-montage-botanical-folio-season-hero.webp"
+    },
+    {
+      "id": "challenger-jet-ticket",
+      "label": "Billete de avión clásico",
+      "verdict": "declined",
+      "lineage": "carteras de billetes de los años 60",
+      "thesis": "Cupones que se sellan y anulan.",
+      "palette": [
+        "#0b2545",
+        "#d62828",
+        "#ffffff"
+      ],
+      "materials": [
+        "papel autocopiativo",
+        "sellos"
+      ],
+      "viewport": "Un cupón por página.",
+      "case": "Encaja mal: es explícitamente retro.",
+      "kept": "Los estados se estampan y nada desaparece sin dejar rastro.",
+      "risk": "Retro.",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-jet-age-ticket-wallet-hero.webp"
+    },
+    {
+      "id": "challenger-emigre",
+      "label": "Muestrario bitmap",
+      "verdict": "declined",
+      "lineage": "tipografía bitmap de los 80–90",
+      "thesis": "Letras de píxel a escala de cartel.",
+      "palette": [
+        "#ffffff",
+        "#000000",
+        "#ff2bd6"
+      ],
+      "materials": [
+        "píxel visible",
+        "trama"
+      ],
+      "viewport": "Titular pixelado sobre columnas densas.",
+      "case": "Encaja mal: nostalgia digital.",
+      "kept": "Mostrar la misma forma a varios tamaños.",
+      "risk": "Retro.",
+      "hero": "https://impeccable.style/worlds/cards/emigre-bitmap-specimen-hero.webp"
+    },
+    {
+      "id": "challenger-variable-type",
+      "label": "Muestrario de fuente variable",
+      "verdict": "declined",
+      "lineage": "webs de fundiciones tipográficas",
+      "thesis": "Una letra gigante que cambia con un deslizador.",
+      "palette": [
+        "#fafafa",
+        "#111111",
+        "#ff3d00"
+      ],
+      "materials": [
+        "papel blanco",
+        "tinta negra"
+      ],
+      "viewport": "Glifo gigante y rejilla.",
+      "case": "Encaja mal: no hay nada que ajustar con deslizadores en esta tarea.",
+      "kept": "Jerarquía sólo por escala y peso.",
+      "risk": "Sin relación con la tarea.",
+      "hero": "https://impeccable.style/worlds/cards/variable-font-specimen-hero.webp"
+    }
+  ],
+  "reroll": {
+    "registers": [
+      "safer",
+      "bolder"
+    ]
+  },
+  "buildPath": {
+    "value": "code"
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "El estándar de la categoría",
+    "thesis": "Un panel de administración limpio y actual, al nivel de los mejores productos.",
+    "palette": [
+      "#ffffff",
+      "#0f172a",
+      "#2563eb"
+    ],
+    "materials": [
+      "rejilla limpia",
+      "tabla y panel lateral"
+    ],
+    "viewport": "Barra superior, tabla de páginas y panel de detalle con vista previa.",
+    "risk": "Indistinguible de cualquier otro panel, por diseño."
+  },
+  "steer": true
+}

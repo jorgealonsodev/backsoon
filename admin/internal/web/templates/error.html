@@ -1,0 +1,12 @@
+{{define "error"}}{{template "top" .}}
+<main id="main" class="container container-narrow" data-view="error">
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header"><h1 class="card-title">{{.Heading}}</h1></div>
+<div class="card-body">
+<div class="alert alert-danger">{{template "icon" "alert"}}<div>{{.Message}}</div></div>
+</div>
+<div class="card-footer"><a class="btn" href="{{.BackHref}}">{{template "icon" "back"}}{{.BackLabel}}</a></div>
+</div>
+</main>
+{{template "bottom" .}}{{end}}

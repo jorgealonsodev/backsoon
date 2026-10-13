@@ -1,0 +1,98 @@
+{{define "directory"}}{{template "top" .}}
+<main id="main" class="container" data-view="directory">
+{{template "notice" .}}
+{{- with .Lookup.Answer}}
+<div class="alert alert-answer" role="status" id="lookup-answer">{{template "icon" "search"}}<div><p class="answer-title"><code class="answer-dest">{{.Dest}}</code> shows <strong>{{.PageName}}</strong></p><p>{{.Note}}</p></div></div>
+{{- end}}
+{{- if .Lookup.Error}}
+<div class="alert alert-danger" id="lookup-error">{{template "icon" "alert"}}<div><span class="sr">Error: </span>{{.Lookup.Error}}</div></div>
+{{- end}}
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header">
+<h1 class="card-title">Maintenance pages</h1>
+<div class="card-tools">
+<form class="lookup" method="get" action="/" role="search">
+<label class="sr" for="lookup">Which page does … show?</label>
+<span class="search-field">{{template "icon" "search"}}<input type="search" id="lookup" name="lookup" value="{{.Lookup.Query}}" placeholder="Which page does app.example.com show?" autocomplete="off" autocapitalize="none" spellcheck="false" class="mono-field"{{if .Lookup.Error}} aria-invalid="true" aria-describedby="lookup-error lookup-hint"{{else}} aria-describedby="lookup-hint"{{end}}></span>
+<button class="btn" type="submit">Check</button>
+</form>
+<a class="btn btn-primary" href="/pages/new">{{template "icon" "plus"}}Add page</a>
+</div>
+</div>
+{{- if .Empty}}
+<section class="card-body empty" aria-labelledby="teach-title">
+<h2 id="teach-title">Create a page for an app's domain</h2>
+<p>Right now every visitor who reaches a stopped app sees the default page. Create a page, give it the domain the app answers on, for example app.example.com, and backsoon shows that page whenever the app is down.</p>
+<p><a class="btn btn-primary" href="/pages/new">{{template "icon" "plus"}}Create a page</a></p>
+</section>
+{{- end}}
+<table class="table" role="table">
+<caption class="sr">Maintenance pages and the destinations that show them</caption>
+<thead role="rowgroup">
+<tr role="row"><th scope="col" role="columnheader">Name</th><th scope="col" role="columnheader">Destinations</th><th scope="col" role="columnheader">Preview</th><th scope="col" role="columnheader"><span class="sr">Actions</span></th></tr>
+</thead>
+<tbody role="rowgroup">
+{{- range .Entries}}
+<tr role="row" class="entry{{if .IsDefault}} is-default{{end}}{{if .Hit}} is-hit{{end}}{{if .Focus}} is-focus{{end}}" id="page-{{.ID}}">
+<td role="cell" class="c-name">
+<a class="name" href="/pages/{{.ID}}">{{.Name}}</a>{{if .Hit}} <span class="badge badge-orange">Match</span>{{end}}
+<p class="sub">Updated <time datetime="{{.UpdatedISO}}">{{.UpdatedText}}</time></p>
+</td>
+<td role="cell" class="c-dests">
+{{- if .IsDefault}}
+<ul class="chips"><li class="chip chip-else{{if .Hit}} is-hit{{end}}">{{template "icon" "lines"}}<span>Everything else</span></li></ul>
+{{- else if .NoDests}}
+<span class="badge badge-warning">No destinations</span> <span class="sub">Visitors never see this page.</span>
+{{- else}}
+<ul class="chips">
+{{- range .Dests}}
+{{template "chip" .}}
+{{- end}}
+</ul>
+{{- end}}
+</td>
+<td role="cell" class="c-preview"><a class="btn btn-sm" href="/?focus={{.ID}}#page-{{.ID}}">{{template "icon" "eye"}}Preview<span class="sr"> {{.Name}}</span></a></td>
+<td role="cell" class="c-actions">
+<details class="menu" name="row-menu">
+<summary aria-label="Actions for {{.Name}}">{{template "icon" "dots"}}</summary>
+<div class="menu-list">
+<a href="/pages/{{.ID}}">{{template "icon" "edit"}}Edit</a>
+<a href="/pages/{{.ID}}/preview" target="_blank" rel="noopener">{{template "icon" "external"}}Preview full size</a>
+{{- if not .IsDefault}}
+<form method="post" action="/pages/{{.ID}}/delete">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<button type="submit" class="is-danger">{{template "icon" "trash"}}Delete…</button>
+</form>
+{{- end}}
+</div>
+</details>
+</td>
+</tr>
+{{- if .Focus}}
+<tr role="row" class="preview-row">
+<td role="cell" colspan="4">
+<div class="preview-panel">
+<iframe class="preview" src="/pages/{{.ID}}/preview" sandbox title="Preview of {{.Name}}" referrerpolicy="no-referrer"></iframe>
+<p class="preview-tools"><a href="/pages/{{.ID}}/preview" target="_blank" rel="noopener">Open the preview full size</a><a href="/#page-{{.ID}}">Close the preview</a></p>
+</div>
+</td>
+</tr>
+{{- end}}
+{{- end}}
+</tbody>
+</table>
+<div class="card-footer how">
+<p class="hint" id="lookup-hint">Enter a domain or a service:port. The answer follows the order backsoon uses.</p>
+<details>
+<summary>How backsoon picks a page</summary>
+<ol>
+<li>A page that owns the visitor's domain.</li>
+<li>Otherwise, a page that owns the service:port of the NPM proxy host.</li>
+<li>Otherwise, the default page.</li>
+</ol>
+</details>
+</div>
+</div>
+</main>
+{{template "bottom" .}}{{end}}

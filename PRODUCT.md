@@ -32,6 +32,7 @@ One global NPM snippet plus a static nginx: adding an application never touches 
 ## Brand Commitments
 - Name: backsoon (lowercase).
 - Panel UI language: English.
+- Standing visual preference (user, round 2): the panel must sit alongside Portainer and Nginx Proxy Manager 2.x — familiar Tabler-family admin grammar, contemporary, not retro. Rejected: the lobby-directory world (colours, retro feel).
 - Maintenance page template (templates/maintenance.html) is a separate visitor-facing artifact; its default page content is Spanish and self-contained. The panel must not restyle that template implicitly.
 
 ## Evidence on Hand

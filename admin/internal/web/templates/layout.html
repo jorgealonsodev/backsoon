@@ -1,0 +1,43 @@
+{{define "logo"}}<svg class="logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="1" y="1" width="22" height="22" rx="6" class="logo-tile"/><path d="M8.5 8.5 6.5 10.5l2 2M6.5 10.5H13a3.5 3.5 0 0 1 0 7h-2" class="logo-stroke"/></svg>{{end}}
+
+{{define "icon"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{{if eq . "search"}}<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>{{else if eq . "plus"}}<path d="M12 5v14M5 12h14"/>{{else if eq . "dots"}}<circle cx="12" cy="5.5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="18.5" r="1"/>{{else if eq . "eye"}}<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.75"/>{{else if eq . "edit"}}<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4"/>{{else if eq . "trash"}}<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1.5 1.5 0 0 0 1.5 1.4h7A1.5 1.5 0 0 0 17 19l1-12M9 7V4.5h6V7"/>{{else if eq . "external"}}<path d="M13 5h6v6M19 5l-8 8M17 14v4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 5 18V9a1.5 1.5 0 0 1 1.5-1.5H10"/>{{else if eq . "check"}}<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>{{else if eq . "warn"}}<path d="M12 4 2.8 19.5h18.4L12 4ZM12 10v4.5M12 17.2v.1"/>{{else if eq . "alert"}}<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16v.1"/>{{else if eq . "info"}}<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/>{{else if eq . "back"}}<path d="M15 5l-7 7 7 7"/>{{else if eq . "upload"}}<path d="M12 16V4M7 9l5-5 5 5M5 20h14"/>{{else if eq . "page"}}<path d="M7 3.5h7l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5ZM14 3.5V8h4.5"/>{{else if eq . "lines"}}<path d="M5 7h14M5 12h14M5 17h9"/>{{end}}</svg>{{end}}
+
+{{define "mark"}}{{if .IsService}}<svg class="icon mark mark-service" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/><path d="M7 7.5v.1M7 16.5v.1"/></svg>{{else}}<svg class="icon mark mark-domain" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.7 5.6 3.7 9s-1.1 6.4-3.7 9c-2.6-2.6-3.7-5.6-3.7-9S9.4 5.6 12 3Z"/></svg>{{end}}{{end}}
+
+{{define "chip"}}<li class="chip{{if .Hit}} is-hit{{end}}">{{template "mark" .}}<span class="sr">{{.ChipLabel}}</span><code>{{.Value}}</code></li>{{end}}
+
+{{define "top"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:,">
+<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">{{.Style}}</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+{{- if .Authed}}
+<header class="navbar">
+<div class="container navbar-inner">
+<a class="brand" href="/">{{template "logo"}}<span>backsoon</span></a>
+<div class="navbar-end">
+<span class="who">{{.Who}}</span>
+<form class="inline-form" method="post" action="/logout">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button class="btn" type="submit">Sign out</button>
+</form>
+</div>
+</div>
+</header>
+{{- end}}
+{{end}}
+
+{{define "bottom"}}</body>
+</html>
+{{end}}
+
+{{define "notice"}}{{with .Notice}}<div class="alert {{if .Warn}}alert-warning{{else}}alert-success{{end}}" role="status">{{if .Warn}}{{template "icon" "warn"}}{{else}}{{template "icon" "check"}}{{end}}<div>{{if .Warn}}<strong>Warning.</strong> {{end}}{{.Text}}</div></div>{{end}}{{end}}
+
+{{define "issues"}}{{range .}}<li class="err"><span class="sr">Error: </span>{{if .Subject}}<code>{{.Subject}}</code> {{end}}{{.Text}}</li>{{end}}{{end}}

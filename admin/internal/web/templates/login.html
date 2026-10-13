@@ -1,0 +1,26 @@
+{{define "login"}}{{template "top" .}}
+<main id="main" class="login" data-view="login">
+<a class="brand brand-login" href="/login" aria-label="backsoon">{{template "logo"}}<span>backsoon</span></a>
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-body">
+<h1 class="card-title center">Sign in to backsoon</h1>
+{{- if .Error}}
+<div class="alert alert-danger" id="login-error" role="alert">{{template "icon" "alert"}}<div>{{.Error}}</div></div>
+{{- end}}
+<form class="form" method="post" action="/login">
+<input type="hidden" name="login_token" value="{{.Token}}">
+<div class="field">
+<label for="user">User</label>
+<input type="text" id="user" name="user" value="{{.User}}" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus{{if .Error}} aria-describedby="login-error"{{end}}>
+</div>
+<div class="field">
+<label for="password">Password</label>
+<input type="password" id="password" name="password" autocomplete="current-password"{{if .Error}} aria-describedby="login-error"{{end}}>
+</div>
+<button class="btn btn-primary btn-block" type="submit">Sign in</button>
+</form>
+</div>
+</div>
+</main>
+{{template "bottom" .}}{{end}}
