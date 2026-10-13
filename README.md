@@ -2,15 +2,15 @@
 
 A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an upstream is down, NPM hands the request to `backsoon`, a static nginx that answers `503` with the right page for that domain or destination. Design and requirements live in [PRD.md](PRD.md).
 
-> **Status: walking skeleton.** Static `backsoon` is verified. The NPM global snippet passed local end-to-end acceptance and independent functional verification. The owner explicitly left this candidate without native review after a pre-authority tooling failure; this is not native approval. No production deployment or merge has been performed. The admin panel, CI and full Portainer installation guide remain outside this first cut.
+> **Status: in development.** Static `backsoon` and the NPM global snippet are verified (local end-to-end acceptance and independent functional verification; the snippet was left without native review by the owner after a tooling failure, which is not native approval). The `backsoon-admin` panel is implemented and passes its own end-to-end suite; its independent verification is in progress. No production deployment or merge has been performed. CI and the full Portainer installation guide remain to be done.
 
 | Piece | State |
 |-------|-------|
 | `backsoon` static nginx service (`nginx/`, `templates/`, `docker-compose.yml`) | implemented |
 | Local NPM test harness (`compose.test.yml`, [docs/npm-harness.md](docs/npm-harness.md)) | separate unit, see its doc |
 | `npm/server_proxy.conf` and `make e2e` (`test/e2e.sh`) | local acceptance and independent functional checks passed; owner-authorized native-review omission |
-| `backsoon-admin` panel (`admin/` only has `go.mod`) | **not yet** |
-| CI and bcrypt hash guide | **not yet** |
+| `backsoon-admin` panel (`admin/`, `make e2e-admin`) | implemented; independent verification in progress |
+| CI | **not yet** |
 
 ## Quick path: try the service on its own
 
@@ -44,25 +44,60 @@ Invalid hosts or targets never reach the filesystem: they fall back to the defau
 
 Copy [`env.example`](env.example) to `.env` and edit the private copy. In Portainer, enter the values under **Environment variables** or use **Load variables from .env file** to upload it. Never commit real credentials: `.env` and `.env.*` files are ignored; the public example contains no secrets.
 
-The example lists all five variables from the PRD. Only `BACKSOON_REFRESH` is consumed by the current compose. The admin user, password/hash and session secret are reserved for the **not-yet-implemented panel** and are not passed to any current service. Its secrets are deliberately blank; importing the template does not enable an admin panel or configure authentication.
+The example lists every variable the stack reads. Its secrets are deliberately blank: fill them in your private copy (see [Admin panel](#admin-panel)).
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `BACKSOON_REFRESH` | `10` | Seconds used for `Retry-After`, the JSON `retry_after` and the page's `<meta http-equiv="refresh">`. Integer 1-99999; anything else stops the container at start. |
+| `BACKSOON_REFRESH` | `10` | Seconds used for `Retry-After`, the JSON `retry_after` and the page's `<meta http-equiv="refresh">`. Integer 1-99999; anything else stops the container at start. Shared with the panel. |
+| `BACKSOON_ADMIN_USER` | none | Panel administrator user. Required by the panel. |
+| `BACKSOON_ADMIN_PASSWORD_HASH` | none | bcrypt hash of the administrator password. Preferred; wins if both password variables are set. |
+| `BACKSOON_ADMIN_PASSWORD` | none | Plaintext alternative (at most 72 bytes). Accepted, with a warning in the panel log. |
+| `BACKSOON_SESSION_SECRET` | none | Random secret of at least 32 bytes that signs the 12-hour session cookies. Required by the panel. |
+
+Without a user, a password or hash, and a secret the panel exits at start with a message naming the missing variable; it never runs without login. `backsoon` does not depend on the panel and keeps serving pages if the panel is stopped or misconfigured.
 
 The provisional `default.html` is rendered from `templates/maintenance.html` by `backsoon-init`. If `default.html` already exists, seeding changes nothing, so redeploys keep your pages (and an old refresh value inside an existing page). Concurrent initializers render into exclusive temporary files on that volume and publish with a non-overwriting hard link; a losing initializer cannot modify the published page.
+
+## Admin panel
+
+`backsoon-admin` manages the pages: create one from the template or upload a self-contained `.html` (UTF-8, at most 512 KB), assign it to domains and `service:port` destinations, preview it in a sandbox, replace or delete it. Every change is published atomically to the `backsoon_pages` volume and is served on the next request, with no restart. The panel answers the question "which page does this destination show?" in the same order `backsoon` uses.
+
+1. **Create the password hash.** Use bcrypt cost 12 (the `htpasswd` default, 5, is too weak for an internet-facing login):
+
+   ```sh
+   docker run --rm httpd:2.4-alpine htpasswd -nbBC 12 admin 'your-password' | cut -d: -f2
+   ```
+
+   The output starts with `$2y$12$` and is 60 characters long. Prefix the command with a space or clear your shell history afterwards, since it contains the password.
+
+2. **Set the variables** in Portainer (Environment variables) or in your private `.env`. A bcrypt hash contains `$`, which Docker Compose treats as the start of a variable when it reads an env file. Checked with Docker Compose 5.6.0:
+
+   | How the hash is given | Result |
+   |-----------------------|--------|
+   | `.env`: `BACKSOON_ADMIN_PASSWORD_HASH='$2y$12$…'` (single quotes) | intact |
+   | `.env`: every `$` written as `$$` | intact |
+   | process environment (`export …` before `docker compose up`) | intact |
+   | `.env` without quotes, or with double quotes | **truncated** to `$2y$12` |
+
+   A truncated hash is not a silent login failure: the panel refuses to start with `BACKSOON_ADMIN_PASSWORD_HASH is not a valid bcrypt hash`. If you see that message after entering the hash in Portainer, enter it again with every `$` written as `$$`.
+
+3. **Generate the session secret**, for example `openssl rand -hex 32`.
+
+4. **Publish the panel through NPM** with a proxy host such as `backsoon.example.com` → `backsoon-admin:8080`, with SSL. The panel publishes no ports, its session cookie is `Secure`, and it trusts the `X-Real-IP` header that NPM sets for the login rate limit (5 failed attempts per IP every 15 minutes). An NPM Access List or a LAN/VPN-only host adds another layer.
+
+The panel stores its metadata in the `backsoon_meta` volume (`sites.json` plus the original HTML of each page) and republishes every page from it at start, which repairs an inconsistent `backsoon_pages`. It runs as uid 65532 on a read-only root filesystem with all capabilities dropped; `backsoon-init` hands the pages volume to that user on every deploy. The panel's visual system is described in [DESIGN.md](DESIGN.md).
 
 ## Commands
 
 | Command | What it does |
 |---------|--------------|
-| `make lint` | `docker compose config`, `nginx -t` on the rendered config, pinned-image and self-contained-page checks, shell syntax. |
-| `make test` | Builds the image and runs `test/unit.sh`: curl tests against throwaway containers on loopback ephemeral ports (`bs-unit-*` names, removed on exit), including concurrent seeding. |
+| `make lint` | `docker compose config`, `nginx -t` on the rendered config, pinned-image and self-contained-page checks, shell syntax, panel wiring, `gofmt` and `go vet` for `admin/`. |
+| `make test` | Builds the image and runs `test/unit.sh` (curl tests against throwaway containers on loopback ephemeral ports, `bs-unit-*` names, removed on exit, including concurrent seeding), then the panel's Go tests. |
 | `sh test/seed-race.sh` | Focused concurrent-seeding regression with two real init entrypoints and a read-only HTTP reader; checks publication, no overwrite and cleanup. |
 | `make e2e-up` / `make e2e-down` | Start / remove the NPM harness. See [docs/npm-harness.md](docs/npm-harness.md). |
-| `make e2e` | Disposable real NPM tests: healthy routing, host/target/default fallback, POST/HEAD/JSON, 502/503/504, absent backend/restart/recovery, rollback and legitimate-503 variant. |
+| `make e2e` | Both disposable real-NPM suites, one after the other: `make e2e-npm` (healthy routing, host/target/default fallback, POST/HEAD/JSON, 502/503/504, absent backend/restart/recovery, rollback, legitimate-503 variant, latency gate) and `make e2e-admin` (the panel through NPM: login, rate limit, CSRF, uploads, destinations, preview sandbox, publication visible on the next request). Never run them in parallel: they share the loopback ports. |
 
-`make test` has no Go part yet: `admin/` has no packages, so `go test` joins in with the panel.
+`make lint` and `make test` need Go 1.26 or newer in addition to Docker.
 
 ## Details
 
