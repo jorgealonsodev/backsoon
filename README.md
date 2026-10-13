@@ -42,6 +42,10 @@ Invalid hosts or targets never reach the filesystem: they fall back to the defau
 
 ## Configuration
 
+Copy [`env.example`](env.example) to `.env` and edit the private copy. In Portainer, enter the values under **Environment variables** or use **Load variables from .env file** to upload it. Never commit real credentials: `.env` and `.env.*` files are ignored; the public example contains no secrets.
+
+The example lists all five variables from the PRD. Only `BACKSOON_REFRESH` is consumed by the current compose. The admin user, password/hash and session secret are reserved for the **not-yet-implemented panel** and are not passed to any current service. Its secrets are deliberately blank; importing the template does not enable an admin panel or configure authentication.
+
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `BACKSOON_REFRESH` | `10` | Seconds used for `Retry-After`, the JSON `retry_after` and the page's `<meta http-equiv="refresh">`. Integer 1-99999; anything else stops the container at start. |
