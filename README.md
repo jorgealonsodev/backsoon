@@ -2,13 +2,13 @@
 
 A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an upstream is down, NPM hands the request to `backsoon`, a static nginx that answers `503` with the right page for that domain or destination. Design and requirements live in [PRD.md](PRD.md).
 
-> **Status: walking skeleton.** Static `backsoon` is verified. The NPM global snippet passed local end-to-end acceptance and independent functional verification; native review and delivery remain pending. The admin panel, CI and full Portainer installation guide remain outside this first cut.
+> **Status: walking skeleton.** Static `backsoon` is verified. The NPM global snippet passed local end-to-end acceptance and independent functional verification. The owner explicitly left this candidate without native review after a pre-authority tooling failure; this is not native approval. No production deployment or merge has been performed. The admin panel, CI and full Portainer installation guide remain outside this first cut.
 
 | Piece | State |
 |-------|-------|
 | `backsoon` static nginx service (`nginx/`, `templates/`, `docker-compose.yml`) | implemented |
 | Local NPM test harness (`compose.test.yml`, [docs/npm-harness.md](docs/npm-harness.md)) | separate unit, see its doc |
-| `npm/server_proxy.conf` and `make e2e` (`test/e2e.sh`) | local acceptance and independent functional checks passed; native review pending |
+| `npm/server_proxy.conf` and `make e2e` (`test/e2e.sh`) | local acceptance and independent functional checks passed; owner-authorized native-review omission |
 | `backsoon-admin` panel (`admin/` only has `go.mod`) | **not yet** |
 | CI and bcrypt hash guide | **not yet** |
 
