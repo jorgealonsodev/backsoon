@@ -46,14 +46,15 @@ Invalid hosts or targets never reach the filesystem: they fall back to the defau
 |----------|---------|---------|
 | `BACKSOON_REFRESH` | `10` | Seconds used for `Retry-After`, the JSON `retry_after` and the page's `<meta http-equiv="refresh">`. Integer 1-99999; anything else stops the container at start. |
 
-The provisional `default.html` is rendered from `templates/maintenance.html` by `backsoon-init`. If `default.html` already exists, seeding changes nothing, so redeploys keep your pages (and an old refresh value inside an existing page).
+The provisional `default.html` is rendered from `templates/maintenance.html` by `backsoon-init`. If `default.html` already exists, seeding changes nothing, so redeploys keep your pages (and an old refresh value inside an existing page). Concurrent initializers render into exclusive temporary files on that volume and publish with a non-overwriting hard link; a losing initializer cannot modify the published page.
 
 ## Commands
 
 | Command | What it does |
 |---------|--------------|
 | `make lint` | `docker compose config`, `nginx -t` on the rendered config, pinned-image and self-contained-page checks, shell syntax. |
-| `make test` | Builds the image and runs `test/unit.sh`: curl tests against throwaway containers on loopback ephemeral ports (`bs-unit-*` names, removed on exit). |
+| `make test` | Builds the image and runs `test/unit.sh`: curl tests against throwaway containers on loopback ephemeral ports (`bs-unit-*` names, removed on exit), including concurrent seeding. |
+| `sh test/seed-race.sh` | Focused concurrent-seeding regression with two real init entrypoints and a read-only HTTP reader; checks publication, no overwrite and cleanup. |
 | `make e2e-up` / `make e2e-down` | Start / remove the NPM harness. See [docs/npm-harness.md](docs/npm-harness.md). |
 | `make e2e` | Runs `test/e2e.sh`, which does not exist yet (NPM integration). |
 

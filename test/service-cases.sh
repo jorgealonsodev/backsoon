@@ -235,6 +235,74 @@ target" "$(vol_sh "$ID-seed" 'ls -A /pages')"
   expect_eq "rejected seeding writes nothing" "" "$(vol_sh "$ID-bad" 'ls -A /pages')"
 }
 
+# Gate only the external sed command, not the entrypoint: both real init scripts have
+# opened their render output before either can publish. Releasing the second writer
+# after the first publication deterministically exposes a shared temporary inode.
+case_seed_concurrency() {
+  section "concurrent PID-1 seeders never mutate a published page (B1)"
+  mkdir -p "$ROOT/.odd-checks"
+  SEED_GATE_DIR=$(mktemp -d "$ROOT/.odd-checks/seed-gate.XXXXXX") || return 1
+  mkdir "$SEED_GATE_DIR/bin"
+  cat >"$SEED_GATE_DIR/bin/sed" <<'GATE'
+#!/bin/sh
+set -eu
+: >"/gate/ready-$SEED_ROLE"
+n=0
+while [ ! -e "/gate/release-$SEED_ROLE" ]; do
+  n=$((n + 1))
+  [ "$n" -lt 200 ] || { echo "seed gate timed out" >&2; exit 124; }
+  sleep 0.05
+done
+exec /bin/sed "$@"
+GATE
+  chmod +x "$SEED_GATE_DIR/bin/sed"
+  race_vol="$ID-seed-race"
+  make_volume "$race_vol" || return 1
+  for role in 1 2; do
+    race_name="$ID-seed-race-$role"
+    CONTAINERS="$CONTAINERS $race_name"
+    refresh=7
+    [ "$role" = 1 ] || refresh=9
+    docker run -d --name "$race_name" -v "$race_vol:/pages" \
+      -v "$SEED_GATE_DIR:/gate" -e "SEED_ROLE=$role" \
+      -e "BACKSOON_REFRESH=$refresh" \
+      -e 'PATH=/gate/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+      --entrypoint sh "$IMAGE" /docker-entrypoint.d/45-backsoon-seed.sh >/dev/null || return 1
+    waits=0
+    while [ ! -e "$SEED_GATE_DIR/ready-$role" ]; do
+      waits=$((waits + 1))
+      if [ "$waits" -ge 100 ]; then
+        ko "seeder $role reaches the render gate"
+        docker logs "$race_name" 2>&1
+        return 1
+      fi
+      sleep 0.05
+    done
+  done
+  touch "$SEED_GATE_DIR/release-1"
+  rc1=$(timeout 20 docker wait "$ID-seed-race-1") || return 1
+  expect_eq "first init exits successfully" 0 "$rc1"
+  expect_has "first init reports publication" "$(docker logs "$ID-seed-race-1" 2>&1)" 'seeded /pages/default.html'
+  race_sum=$(vol_sh "$race_vol" 'sha256sum /pages/default.html')
+  start_service "$ID-seed-race-reader" "$race_vol" -e BACKSOON_REFRESH=7 || return 1
+  race_port=$PORT
+  req "$race_port" /
+  expect_maintenance "first published seed" 7
+  expect_has "first page has refresh 7" "$BODY" 'content="7"'
+  touch "$SEED_GATE_DIR/release-2"
+  rc2=$(timeout 20 docker wait "$ID-seed-race-2") || return 1
+  expect_eq "second init exits successfully" 0 "$rc2"
+  expect_lacks "second init cannot report replacement" "$(docker logs "$ID-seed-race-2" 2>&1)" 'seeded /pages/default.html'
+  expect_eq "later render leaves published inode bytes unchanged" "$race_sum" "$(vol_sh "$race_vol" 'sha256sum /pages/default.html')"
+  req "$race_port" /
+  expect_maintenance "page after concurrent loser finishes" 7
+  expect_has "published page still has refresh 7" "$BODY" 'content="7"'
+  expect_lacks "later refresh is never published" "$BODY" 'content="9"'
+  expect_eq "all seeder temporary files cleaned" 'default.html
+host
+target' "$(vol_sh "$race_vol" 'ls -A /pages')"
+}
+
 run_all_cases() {
   case_template
   case_health_and_basics
@@ -247,4 +315,5 @@ run_all_cases() {
   case_footprint
   case_refresh_validation
   case_seed
+  case_seed_concurrency
 }

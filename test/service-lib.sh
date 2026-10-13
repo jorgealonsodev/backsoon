@@ -8,6 +8,7 @@ JOBS=0
 CONTAINERS=""
 VOLUMES=""
 IMAGES=""
+SEED_GATE_DIR=""
 
 # --- reporting ---------------------------------------------------------------
 
@@ -126,4 +127,9 @@ cleanup() {
   for _c in $CONTAINERS; do docker rm -f "$_c" >/dev/null 2>&1; done
   for _v in $VOLUMES; do docker volume rm "$_v" >/dev/null 2>&1; done
   for _i in $IMAGES; do docker rmi "$_i" >/dev/null 2>&1; done
+  if [ -n "$SEED_GATE_DIR" ]; then
+    rm -f "$SEED_GATE_DIR/bin/sed" "$SEED_GATE_DIR/ready-1" "$SEED_GATE_DIR/ready-2" \
+      "$SEED_GATE_DIR/release-1" "$SEED_GATE_DIR/release-2"
+    rmdir "$SEED_GATE_DIR/bin" "$SEED_GATE_DIR"
+  fi
 }

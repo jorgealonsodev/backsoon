@@ -15,15 +15,14 @@ sh /docker-entrypoint.d/05-backsoon-validate.sh
 [ ! -e "$PAGES/default.html" ] || exit 0
 
 umask 022
-tmp="$PAGES/.default.html.$$"
-trap 'rm -f "$tmp"' EXIT
-
-# `test -w` is true for root even on a read-only mount, so probe with a real write (`true`, not
-# `:`: a failed redirection on a special builtin would terminate the shell).
-if ! { true >"$tmp"; } 2>/dev/null; then
+# Every init entrypoint is PID 1, so $$ is not unique across containers sharing
+# this volume. Create a private inode on the same filesystem before rendering.
+# This also probes write access: test -w is unreliable for root on a ro mount.
+if ! tmp=$(mktemp "$PAGES/.default.html.XXXXXX" 2>/dev/null); then
     echo "$ME: notice: $PAGES is read-only and has no default.html; run the backsoon-init service to seed it"
     exit 0
 fi
+trap 'rm -f "$tmp"' EXIT
 
 mkdir -p "$PAGES/host" "$PAGES/target"
 sed -e 's|{{APP_NAME}}|Este servicio|g' \
@@ -33,7 +32,12 @@ sed -e 's|{{APP_NAME}}|Este servicio|g' \
     -e 's|{{ICON}}|🔧|g' \
     "$TEMPLATE" >"$tmp"
 
-# A hard link fails if default.html appeared meanwhile, so a concurrent seed cannot overwrite it.
+# mktemp starts at 0600; nginx's unprivileged worker must be able to read the
+# complete file before it becomes the public default (the serving volume is ro).
+chmod 0644 "$tmp"
+
+# Publish the complete private inode without replacing an existing default.
+# Losing seeders only remove their own temporary file, never the winner's inode.
 if ln "$tmp" "$PAGES/default.html" 2>/dev/null; then
     echo "$ME: seeded $PAGES/default.html (refresh ${BACKSOON_REFRESH}s)"
 fi
