@@ -24,10 +24,10 @@ BACKSOON_TEST_HTTP_PORT=18080 BACKSOON_TEST_ADMIN_PORT=18181 sh test/harness.sh 
 |------|-------|
 | Compose project | `backsoon-e2e` (override: `BACKSOON_TEST_PROJECT`, must start with `backsoon-`) |
 | Published ports | `127.0.0.1:${BACKSOON_TEST_HTTP_PORT:-8080}→npm:80`, `127.0.0.1:${BACKSOON_TEST_ADMIN_PORT:-8181}→npm:81`; nothing else |
-| Services | `npm`, `app1`, `app2` (always); production-built `backsoon` (profile `backsoon`, start with `BACKSOON_TEST_WITH_BACKSOON=1`); `fixtures` and private `app-errors` (profile `tools`) |
+| Services | `npm`, `app1`, `app2` (always); production-built `backsoon` (profile `backsoon`, start with `BACKSOON_TEST_WITH_BACKSOON=1`); `fixtures` and private `app-errors` (profile `tools`); `pages-init` and the production-built panel `backsoon-admin` (profile `admin`, start with `BACKSOON_TEST_WITH_ADMIN=1`) |
 | Proxy hosts | `app1.test → app1:80`, `app2.test → app2:80`, `advanced_config` empty |
 | NPM user | `admin@backsoon.test` / built-in password, **test-only** (`BACKSOON_TEST_NPM_EMAIL`, `BACKSOON_TEST_NPM_PASSWORD`) |
-| Volumes | `npm-data`, `npm-letsencrypt`, `npm-custom` (→ `/data/nginx/custom`, writable), `pages` |
+| Volumes | `npm-data`, `npm-letsencrypt`, `npm-custom` (→ `/data/nginx/custom`, writable), `pages`, `meta` (panel only) |
 | Labels | every container, network and volume has `com.backsoon.test=true` |
 | Commands | `up`, `down`, `status`, `check`, `bootstrap`, `fixtures`, `compose …`, `help` |
 
@@ -38,6 +38,7 @@ For `test/e2e.sh`: run compose through `sh test/harness.sh compose <args>` (righ
 - `pages` is written only by `sh test/harness.sh fixtures` (clears the volume, copies `test/fixtures/pages/`). `backsoon` mounts it read-only at `/pages`.
 - `npm-custom` is a separate volume, so `server_proxy.conf` can be installed or reset without editing project sources.
 - `backsoon` builds `nginx/Dockerfile`, so its worker limit, entrypoint validation and envsubst filter match production. The image tag is `<project>-service:local`; it rebuilds on startup. The template bind remains overridable with `BACKSOON_TEST_TEMPLATE`. A missing template fails the start; it does not create a directory.
+- Panel mode (`BACKSOON_TEST_WITH_ADMIN=1`): `up` also starts `backsoon` and `backsoon-admin`, adds the proxy host `admin.test → backsoon-admin:8080` and does **not** install the root-owned page fixtures. `pages-init` seeds the `pages` volume and hands it to uid 65532 with exactly the command of `backsoon-init` in `docker-compose.yml` (`test/lint.sh` compares the two). The panel is built from `admin/Dockerfile`, tagged `<project>-admin:local`, uses test-only credentials (`admin` / `backsoon-test-only-panel-pw`, bcrypt hash in `compose.test.yml`) and is reachable only through NPM (`Host: admin.test`).
 - `app-errors` serves deterministic 200/502/503/504 from `test/fixtures/error-backend.conf` on the private network only. It is started by the e2e runner, not ordinary `up`.
 
 ## Pinned images
@@ -75,7 +76,15 @@ BACKSOON_TEST_HTTP_PORT=18080 BACKSOON_TEST_ADMIN_PORT=18181 make e2e
 
 `make e2e` requires a fresh project (no existing containers or volumes), installs the global snippet only into that project's NPM volume, checks stopped/upstream-error/recovery scenarios and removes only the resources it created. Do not run it against a manually running harness: choose another `BACKSOON_TEST_PROJECT` and free ports, or explicitly stop the throwaway harness first. Failure still runs cleanup; test artifacts (latency records, compiled NPM config, missing-backend headers/body/timing/exit status, worker-warming logs) remain under gitignored `.odd-checks/e2e.*`.
 
+`make e2e` runs `test/e2e.sh` and then `test/admin-e2e.sh`, one after the other, each in its own fresh project (`make e2e-npm` / `make e2e-admin` run one). Both need the same loopback ports; never run them in parallel.
+
 Coverage: original healthy whoami behavior (including a live application's own `/healthz` before and after the global file, and `/healthz` and `/__backsoon` on a stopped application receiving the domain maintenance page with no redirect, since the internal fallback request uses the fixed URI `/` while the client URL is unchanged), host→target→default and `$server:$port`, GET/POST/HEAD/JSON, unique headers even when an upstream sends its own, 502/503/504, NPM validation/reload/restart without backsoon, automatic recovery, disable/restore and the legitimate-503 variant.
+
+### Panel suite (`test/admin-e2e.sh`)
+
+Runs the panel through real NPM (`Host: admin.test`, so `X-Real-IP` and the proxy path are exercised) next to a real `backsoon`, in the default project `backsoon-e2e-admin`; it removes its own containers, volumes, networks and images on exit and keeps artifacts under `.odd-checks/admin-e2e.*` (volume ownership, image size, memory, panel log). The assertions rest on contracts only: routes, statuses, headers (CSP, `Location`, `Retry-After`, `Set-Cookie` flags), form field names, the page names and destinations it submits, and what `backsoon` and NPM publish; never headings, button text or CSS classes. Coverage: CA-17 (no session: 303/401, `POST /pages` creates nothing, the panel refuses to start without user, password or secret), login through the real form and its token cookie, CA-24 (the sixth failed login answers 429 with `Retry-After`, even with the right password), CA-18/19/20 (listing, uploads, 413/422, template escaping, normalization, 409 move confirmation), CA-14 (external-resource confirmation), CA-21 (exact sandbox CSP, 403 on missing or wrong CSRF), CA-6 (create, replace and delete are visible on the next request through NPM with no restart, plus `service:port` pages), RNF-4(a) (panel stopped, `backsoon` keeps serving), RNF-3/RNF-2 (healthy, image < 30 MB, memory < 50 MiB) and RNF-9 (panel log). It also proves the volume hand-over: `/pages`, `/pages/host`, `/pages/target` and `default.html` are owned by 65532, published files are `0644`, and the nginx worker serves every file the panel created.
+
+NPM caches the address of a stopped container per worker (see below), so the suite reloads NPM after stopping `app1` or the panel; otherwise the first request would wait for NPM's 90 s connect timeout.
 
 ### Reload barrier
 

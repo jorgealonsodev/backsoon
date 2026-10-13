@@ -1,6 +1,7 @@
 # backsoon production stack (single stack, e.g. Portainer). Build context is the repository root.
 # Prerequisite: the external network "proxy" exists and Nginx Proxy Manager is attached to it.
-# No published ports: NPM reaches backsoon through the "proxy" network only.
+# No published ports: NPM reaches backsoon and backsoon-admin through the "proxy" network only.
+# backsoon-admin (the panel) is optional for serving: backsoon never depends on it (RNF-4a).
 
 x-backsoon-build: &backsoon-build
   context: .
@@ -9,11 +10,16 @@ x-backsoon-build: &backsoon-build
 services:
   # One-shot: seeds the provisional default.html into the pages volume, then exits. It never
   # overwrites an existing default.html, so redeploys keep whatever pages the volume holds.
+  # It runs as root and is the first writer of the volume, so after seeding it hands the volume
+  # to uid 65532, the panel's user: otherwise root-owned /pages, /pages/host and /pages/target
+  # would stop the panel from publishing. backsoon (nginx) only needs to read: files are 0644.
+  # The hand-over runs on every redeploy, which also repairs volumes created before the panel.
   backsoon-init:
     build: *backsoon-build
     image: backsoon:local
     container_name: backsoon-init
-    entrypoint: ["sh", "/docker-entrypoint.d/45-backsoon-seed.sh"]
+    entrypoint: ["sh", "-c"]
+    command: ["sh /docker-entrypoint.d/45-backsoon-seed.sh && chown -R 65532:65532 /pages"]
     environment:
       BACKSOON_REFRESH: ${BACKSOON_REFRESH:-10}
     volumes:
@@ -42,6 +48,44 @@ services:
       retries: 3
       start_period: 5s
 
+  # The management panel. Reach it through an NPM proxy host (e.g. backsoon.example.com ->
+  # backsoon-admin:8080) with SSL; it publishes no ports. Credentials come from the stack's
+  # variables (see env.example); without them the panel refuses to start.
+  backsoon-admin:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    image: backsoon-admin:local
+    container_name: backsoon-admin
+    restart: unless-stopped
+    environment:
+      BACKSOON_ADMIN_USER: ${BACKSOON_ADMIN_USER:-}
+      BACKSOON_ADMIN_PASSWORD_HASH: ${BACKSOON_ADMIN_PASSWORD_HASH:-}
+      BACKSOON_ADMIN_PASSWORD: ${BACKSOON_ADMIN_PASSWORD:-}
+      BACKSOON_SESSION_SECRET: ${BACKSOON_SESSION_SECRET:-}
+      BACKSOON_REFRESH: ${BACKSOON_REFRESH:-10}
+    volumes:
+      - backsoon_pages:/pages
+      - backsoon_meta:/meta
+    networks:
+      - proxy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      backsoon-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/backsoon-admin", "-healthcheck"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
 networks:
   proxy:
     external: true
@@ -49,3 +93,5 @@ networks:
 volumes:
   backsoon_pages:
     name: backsoon_pages
+  backsoon_meta:
+    name: backsoon_meta

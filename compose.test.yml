@@ -2,7 +2,8 @@
 # Starts a real NPM plus two traefik/whoami apps on private networks; only NPM
 # publishes ports, and only on loopback. Every resource lives under the
 # BACKSOON_TEST_PROJECT project (default backsoon-e2e) and carries the label
-# com.backsoon.test=true.
+# com.backsoon.test=true. Profile "admin" adds the management panel (test-only credentials,
+# reachable only through NPM); test/admin-e2e.sh and BACKSOON_TEST_WITH_ADMIN=1 use it.
 name: ${BACKSOON_TEST_PROJECT:-backsoon-e2e}
 
 x-test-label: &test-label
@@ -75,6 +76,62 @@ services:
     networks: [testnet]
     labels: *test-label
 
+  # Profile "admin": the production volume hand-over. pages-init runs the SAME entrypoint and
+  # command as backsoon-init in docker-compose.yml (test/lint.sh compares them), so the e2e
+  # proves the ownership the production stack really creates. It replaces the root-owned
+  # "fixtures" installer in this mode.
+  pages-init:
+    profiles: [admin]
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    image: ${BACKSOON_TEST_PROJECT:-backsoon-e2e}-service:local
+    pull_policy: build
+    entrypoint: ["sh", "-c"]
+    command: ["sh /docker-entrypoint.d/45-backsoon-seed.sh && chown -R 65532:65532 /pages"]
+    environment:
+      BACKSOON_REFRESH: "${BACKSOON_REFRESH:-10}"
+    volumes:
+      - pages:/pages
+    network_mode: none
+    restart: "no"
+    labels: *test-label
+
+  # Profile "admin": same Dockerfile and hardening as production. Test-only credentials: user
+  # "admin"; the hash below is bcrypt of "backsoon-test-only-panel-pw" ("$" doubled for compose).
+  backsoon-admin:
+    profiles: [admin]
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    image: ${BACKSOON_TEST_PROJECT:-backsoon-e2e}-admin:local
+    pull_policy: build
+    environment:
+      BACKSOON_ADMIN_USER: admin
+      BACKSOON_ADMIN_PASSWORD_HASH: "$$2a$$10$$NhwXIb3qXxqiploIKDqNVuStTkKbQBgBWetT1MBojLGaK/2ohvtDy"
+      BACKSOON_SESSION_SECRET: backsoon-test-only-session-secret-0123456789abcdef
+      BACKSOON_REFRESH: "${BACKSOON_REFRESH:-10}"
+    volumes:
+      - pages:/pages
+      - meta:/meta
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      pages-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/backsoon-admin", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [testnet]
+    labels: *test-label
+
   # Controlled upstream status fixture: no published ports or production state.
   app-errors:
     profiles: [tools]
@@ -126,4 +183,6 @@ volumes:
   npm-custom:
     labels: *test-label
   pages:
+    labels: *test-label
+  meta:
     labels: *test-label

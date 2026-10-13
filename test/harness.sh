@@ -9,6 +9,7 @@ Usage: sh test/harness.sh <command>
 Commands:
   up         start NPM + app1 + app2, install page fixtures, bootstrap NPM via
              its API, then verify app1.test / app2.test through the proxy
+             (BACKSOON_TEST_WITH_ADMIN=1: panel mode, see below)
   down       remove ONLY this project's containers, networks and volumes
   status     show the project's containers
   check      re-run the direct and proxied probes (exit 0 = healthy)
@@ -22,6 +23,9 @@ Environment (all optional):
   BACKSOON_TEST_HTTP_PORT   127.0.0.1 port for NPM :80   (default 8080)
   BACKSOON_TEST_ADMIN_PORT  127.0.0.1 port for NPM :81   (default 8181)
   BACKSOON_TEST_WITH_BACKSOON=1  also start the optional backsoon service
+  BACKSOON_TEST_WITH_ADMIN=1     panel mode: also start backsoon and backsoon-admin (after the
+                            pages-init volume hand-over), skip the root-owned page fixtures
+                            and add the proxy host admin.test=backsoon-admin:8080
   BACKSOON_TEST_WAIT        bounded wait per step, seconds (default 180)
   BACKSOON_TEST_NPM_EMAIL / BACKSOON_TEST_NPM_PASSWORD  test-only NPM user
 
@@ -59,7 +63,7 @@ done
 
 dc() {
 	docker compose -f "$ROOT/compose.test.yml" -p "$BACKSOON_TEST_PROJECT" \
-		--profile backsoon --profile tools "$@"
+		--profile backsoon --profile tools --profile admin "$@"
 }
 
 need() {
@@ -73,6 +77,7 @@ diagnostics() {
 	echo "harness: --- diagnostics ($BACKSOON_TEST_PROJECT) ---" >&2
 	dc ps -a >&2 || true
 	dc logs --tail 30 npm app1 app2 >&2 || true
+	[ "${BACKSOON_TEST_WITH_ADMIN:-0}" != 1 ] || dc logs --tail 30 pages-init backsoon-admin >&2 || true
 }
 
 # retry <seconds> <description> <command...>: bounded, never loops forever.
@@ -93,6 +98,9 @@ port_free() {
 	python3 -I -c '
 import socket, sys
 s = socket.socket()
+# Like the Docker port publish: lingering TIME_WAIT sockets of a previous run (back-to-back
+# e2e scripts) must not count as "in use"; only a live listener does.
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 try:
     s.bind(("127.0.0.1", int(sys.argv[1])))
 except OSError:
@@ -135,9 +143,12 @@ cmd_up() {
 	fi
 	services="npm app1 app2"
 	[ "${BACKSOON_TEST_WITH_BACKSOON:-0}" != 1 ] || services="$services backsoon"
+	[ "${BACKSOON_TEST_WITH_ADMIN:-0}" != 1 ] || services="$services backsoon backsoon-admin"
 	# shellcheck disable=SC2086 # intentional word splitting of the service list
 	dc up -d --wait --wait-timeout "$BACKSOON_TEST_WAIT" $services || { diagnostics; die "stack failed to start"; }
-	cmd_fixtures
+	# Panel mode: pages-init (the production hand-over) owns the pages volume; root fixtures would
+	# replace it with files the panel cannot manage.
+	[ "${BACKSOON_TEST_WITH_ADMIN:-0}" = 1 ] || cmd_fixtures
 	retry "$BACKSOON_TEST_WAIT" "app1/app2 reachable from npm" sh -c '
 		for a in app1 app2; do
 			docker compose -f "$0" -p "$1" exec -T npm curl -fsS "http://$a/" || exit 1
@@ -155,7 +166,13 @@ cmd_down() {
 	dc down -v --remove-orphans --timeout 10
 }
 
-cmd_bootstrap() { sh "$ROOT/test/npm-bootstrap.sh"; }
+cmd_bootstrap() {
+	if [ "${BACKSOON_TEST_WITH_ADMIN:-0}" = 1 ]; then
+		sh "$ROOT/test/npm-bootstrap.sh" app1.test=app1:80 app2.test=app2:80 admin.test=backsoon-admin:8080
+	else
+		sh "$ROOT/test/npm-bootstrap.sh"
+	fi
+}
 
 cmd_fixtures() {
 	dc run --rm --no-deps -T fixtures >/dev/null

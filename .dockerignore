@@ -1,6 +1,15 @@
-# The static-service build needs only these sources, never secrets/test logs.
+# The image builds need only these sources, never secrets/test logs/tests.
 *
 !nginx/
 !nginx/**
 !templates/
 !templates/maintenance.html
+!admin/
+!admin/go.mod
+!admin/go.sum
+!admin/cmd/
+!admin/cmd/**
+!admin/internal/
+!admin/internal/**
+# Later patterns win: keep the Go tests out of the build context.
+admin/**/*_test.go
