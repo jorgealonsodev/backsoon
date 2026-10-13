@@ -2,14 +2,14 @@
 
 A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an upstream is down, NPM hands the request to `backsoon`, a static nginx that answers `503` with the right page for that domain or destination. Design and requirements live in [PRD.md](PRD.md).
 
-> **Status: in development.** Static `backsoon` and the NPM global snippet are verified (local end-to-end acceptance and independent functional verification; the snippet was left without native review by the owner after a tooling failure, which is not native approval). The `backsoon-admin` panel is implemented and passes its own end-to-end suite; its independent verification is in progress. No production deployment or merge has been performed. CI and the full Portainer installation guide remain to be done.
+> **Status: in development.** Static `backsoon` and the NPM global snippet are verified (local end-to-end acceptance and independent functional verification; the snippet was left without native review by the owner after a tooling failure, which is not native approval). The `backsoon-admin` panel is implemented and passed its end-to-end suite (388 checks through real NPM) and an independent verification. No production deployment or merge has been performed. CI and the full Portainer installation guide remain to be done.
 
 | Piece | State |
 |-------|-------|
 | `backsoon` static nginx service (`nginx/`, `templates/`, `docker-compose.yml`) | implemented |
 | Local NPM test harness (`compose.test.yml`, [docs/npm-harness.md](docs/npm-harness.md)) | separate unit, see its doc |
 | `npm/server_proxy.conf` and `make e2e` (`test/e2e.sh`) | local acceptance and independent functional checks passed; owner-authorized native-review omission |
-| `backsoon-admin` panel (`admin/`, `make e2e-admin`) | implemented; independent verification in progress |
+| `backsoon-admin` panel (`admin/`, `make e2e-admin`) | implemented; end-to-end and independent verification passed |
 | CI | **not yet** |
 
 ## Quick path: try the service on its own
@@ -83,7 +83,7 @@ The provisional `default.html` is rendered from `templates/maintenance.html` by 
 
 3. **Generate the session secret**, for example `openssl rand -hex 32`.
 
-4. **Publish the panel through NPM** with a proxy host such as `backsoon.example.com` → `backsoon-admin:8080`, with SSL. The panel publishes no ports, its session cookie is `Secure`, and it trusts the `X-Real-IP` header that NPM sets for the login rate limit (5 failed attempts per IP every 15 minutes). An NPM Access List or a LAN/VPN-only host adds another layer.
+4. **Publish the panel through NPM** with a proxy host such as `backsoon.example.com` → `backsoon-admin:8080`, with SSL. The panel publishes no ports, its session cookie is `Secure`, and it trusts the `X-Real-IP` header that NPM sets for the login rate limit (5 failed attempts per IP every 15 minutes). The panel accepts that header from any peer, so any container attached to the `proxy` network could bypass the limit (bcrypt remains the brake): keep only trusted containers on that network. Behind a CDN, all visitors may share one address, so a few failed logins can lock out the administrator for 15 minutes. An NPM Access List or a LAN/VPN-only host adds another layer.
 
 The panel stores its metadata in the `backsoon_meta` volume (`sites.json` plus the original HTML of each page) and republishes every page from it at start, which repairs an inconsistent `backsoon_pages`. It runs as uid 65532 on a read-only root filesystem with all capabilities dropped; `backsoon-init` hands the pages volume to that user on every deploy. The panel's visual system is described in [DESIGN.md](DESIGN.md).
 
