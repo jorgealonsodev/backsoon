@@ -1,0 +1,82 @@
+# backsoon service core (PRD 7.4). Rendered by the official entrypoint; the only substituted
+# variable is ${BACKSOON_REFRESH}. Self-contained: needs nothing from nginx.conf except a
+# worker_processes of 1, so the template alone is enough to mount into a stock nginx image.
+# add_header ... always is required (5xx otherwise gets no headers) and is repeated per location
+# because add_header is not inherited once a location declares its own.
+
+# RNF-9: host, destination, status, file served. Deliberately no $remote_addr.
+log_format backsoon '$host $bs_target $status $uri';
+
+# Host as nginx normalized it (lowercase, no port), accepted only as a plain hostname. Anything
+# else maps to "_none", which no valid hostname can produce, so it never matches a page file.
+map $host $bs_host {
+    "~^(?<bs_h>[a-z0-9][a-z0-9.-]{0,249})$"  $bs_h;
+    default                                   "_none";
+}
+
+# Destination sent by NPM, validated: "192.168.1.10:8081" -> "192.168.1.10_8081".
+map $http_x_backsoon_target $bs_target {
+    "~^(?<bs_svc>[a-z0-9][a-z0-9.-]{0,239}):(?<bs_prt>[0-9]{1,5})$"  "${bs_svc}_${bs_prt}";
+    default                                                           "_none";
+}
+
+# RF-12: JSON only when explicitly requested.
+map $http_accept $bs_format {
+    "~^application/json"  json;
+    default               html;
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    root /pages;
+    server_tokens off;
+    autoindex off;
+    access_log /var/log/nginx/access.log backsoon;
+
+    # The body is never read; without this a large upload would turn into a 413 (RF-1: any method).
+    client_max_body_size 0;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Every request is maintenance. Redirecting to a URI (not a named location) turns the method
+    # into GET, so POST/PUT/DELETE/... are served by the static file handler instead of a 405.
+    location / { return 503; }
+    error_page 503 /__backsoon;
+    # Direct hits on the internal URIs below are answered like any other request.
+    error_page 404 =503 /__backsoon;
+
+    location = /__backsoon {
+        internal;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After ${BACKSOON_REFRESH} always;
+        add_header X-Backsoon 1 always;
+        if ($bs_format = json) { rewrite ^ /__backsoon.json last; }
+        # host -> destination -> default; the last URI serves RF-3's empty 503.
+        try_files /host/$bs_host.html /target/$bs_target.html /default.html /__backsoon.empty;
+    }
+
+    location = /__backsoon.json {
+        internal;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After ${BACKSOON_REFRESH} always;
+        add_header X-Backsoon 1 always;
+        default_type application/json;
+        return 503 '{"status":"maintenance","retry_after":${BACKSOON_REFRESH}}';
+    }
+
+    # A bare "return 503" would render nginx's own error page. Inside the error_page chain the
+    # status is rewritten to the original 503, so an empty 200 becomes an empty 503.
+    location = /__backsoon.empty {
+        internal;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After ${BACKSOON_REFRESH} always;
+        add_header X-Backsoon 1 always;
+        default_type text/html;
+        return 200 "";
+    }
+}

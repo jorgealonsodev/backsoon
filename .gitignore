@@ -1,0 +1,12 @@
+# Local secrets and overrides
+.env
+.env.*
+
+# Build output and editor noise
+bin/
+*.test
+coverage.out
+*.swp
+
+# Verifier scratch artifacts (not source)
+.odd-checks/

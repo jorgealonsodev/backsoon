@@ -1,0 +1,51 @@
+# backsoon production stack (single stack, e.g. Portainer). Build context is the repository root.
+# Prerequisite: the external network "proxy" exists and Nginx Proxy Manager is attached to it.
+# No published ports: NPM reaches backsoon through the "proxy" network only.
+
+x-backsoon-build: &backsoon-build
+  context: .
+  dockerfile: nginx/Dockerfile
+
+services:
+  # One-shot: seeds the provisional default.html into the pages volume, then exits. It never
+  # overwrites an existing default.html, so redeploys keep whatever pages the volume holds.
+  backsoon-init:
+    build: *backsoon-build
+    image: backsoon:local
+    container_name: backsoon-init
+    entrypoint: ["sh", "/docker-entrypoint.d/45-backsoon-seed.sh"]
+    environment:
+      BACKSOON_REFRESH: ${BACKSOON_REFRESH:-10}
+    volumes:
+      - backsoon_pages:/pages
+    network_mode: none
+    restart: "no"
+
+  backsoon:
+    build: *backsoon-build
+    image: backsoon:local
+    container_name: backsoon
+    restart: unless-stopped
+    environment:
+      BACKSOON_REFRESH: ${BACKSOON_REFRESH:-10}
+    volumes:
+      - backsoon_pages:/pages:ro
+    networks:
+      - proxy
+    depends_on:
+      backsoon-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  backsoon_pages:
+    name: backsoon_pages
