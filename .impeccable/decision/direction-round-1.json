@@ -1,0 +1,303 @@
+{
+  "title": "Elige el mundo visual del panel",
+  "question": "La propuesta asignada es «Directorio de vestíbulo». Mantenla, elige una alternativa o pide otra tirada.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Directorio de vestíbulo",
+      "kicker": "THE ROLL",
+      "lineage": "directorios de letras intercambiables en vestíbulos de edificios",
+      "thesis": "El panel como el directorio de un edificio: cada destino, en su fila, apunta a la página que verá el visitante.",
+      "palette": [
+        "#1c1e21",
+        "#f1efe8",
+        "#b38b4d",
+        "#c8432b"
+      ],
+      "materials": [
+        "fieltro ranurado",
+        "letras blancas intercambiables",
+        "marco de latón"
+      ],
+      "viewport": "Barra superior con backsoon y «New page»; debajo, el directorio: filas destino → página con guía de puntos y fecha; la fila elegida se despliega con la vista previa.",
+      "risk": "Si el fieltro se aplica como textura literal parece un disfraz retro; el mundo debe quedarse en tipo, paleta, densidad y la fila con guías.",
+      "raised": [
+        {
+          "from": "challenger-ikeda",
+          "raise": "Paleta de compromiso total: fieltro, letra y una sola señal de cambio; nada de grises sueltos."
+        },
+        {
+          "from": "challenger-metro",
+          "raise": "El nombre del destino gana escala de cartel en la cabecera de cada página."
+        },
+        {
+          "from": "challenger-streaming",
+          "raise": "La fila enfocada se despliega con su vista previa y el resto del directorio se atenúa."
+        },
+        {
+          "from": "challenger-labanotation",
+          "raise": "Dominio y servicio:puerto llevan marcas distintas y constantes, no sólo texto."
+        },
+        {
+          "from": "challenger-centre-rail",
+          "raise": "Un único sistema de filetes de un píxel; cada línea del directorio es deliberada."
+        }
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "barra superior",
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          },
+          {
+            "label": "directorio destino → página",
+            "x": 0,
+            "y": 1,
+            "w": 7,
+            "h": 9,
+            "accent": true
+          },
+          {
+            "label": "vista previa",
+            "x": 7,
+            "y": 1,
+            "w": 5,
+            "h": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Desvío por obras",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "señalización temporal de desvíos en carretera",
+      "thesis": "Mientras la aplicación está en obras, el tráfico se desvía y vuelve solo: el panel habla el idioma de las señales de desvío.",
+      "palette": [
+        "#f28c28",
+        "#141414",
+        "#fafafa",
+        "#2f6f3e"
+      ],
+      "materials": [
+        "chapa reflectante",
+        "tipografía de señalización vial"
+      ],
+      "viewport": "Barra superior negra; los destinos como paneles de desvío con flecha hacia su página; vista previa a la derecha.",
+      "risk": "Es la lectura más evidente del producto, y el naranja de obra puede sonar a alarma permanente.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "barra superior",
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          },
+          {
+            "label": "paneles de desvío",
+            "x": 0,
+            "y": 1,
+            "w": 7,
+            "h": 9,
+            "accent": true
+          },
+          {
+            "label": "vista previa",
+            "x": 7,
+            "y": 1,
+            "w": 5,
+            "h": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "challenger-gate-board",
+      "label": "Tablero de embarque",
+      "verdict": "competitive",
+      "lineage": "tarjetas de embarque y paneles de salidas",
+      "thesis": "Destino → página como destino → puerta: un tablero que no pierde de vista ningún cambio.",
+      "palette": [
+        "#111418",
+        "#f5f3ee",
+        "#ffc629",
+        "#e5484d"
+      ],
+      "materials": [
+        "paneles de alto contraste",
+        "bloque escaneable monoespaciado"
+      ],
+      "viewport": "Tablero de destinos en columnas fijas; cada página como tarjeta de embarque segmentada (destinos, idioma, recarga).",
+      "case": "Encaja: un destino movido queda iluminado hasta que lo ves; pierde en claridad porque no hay horarios que ordenen el tablero.",
+      "risk": "Sin salidas ni horas, el tablero puede parecer un disfraz de aeropuerto.",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-boarding-pass-and-gate-board-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/vernacular-ephemera-boarding-pass-and-gate-board.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "barra superior",
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          },
+          {
+            "label": "tablero de destinos",
+            "x": 0,
+            "y": 1,
+            "w": 12,
+            "h": 5,
+            "accent": true
+          },
+          {
+            "label": "tarjeta de la página",
+            "x": 0,
+            "y": 6,
+            "w": 12,
+            "h": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "challenger-ikeda",
+      "label": "Campo de datos",
+      "verdict": "declined",
+      "lineage": "instalaciones de datos en blanco y negro",
+      "thesis": "Columnas de barras y números a densidad de datos.",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "materials": [
+        "barras de un píxel",
+        "numerales monoespaciados"
+      ],
+      "viewport": "Un campo de barras con la columna elegida en foco.",
+      "case": "Encaja mal: nadie gestiona sus páginas de mantenimiento como un código de barras.",
+      "kept": "Compromiso total de paleta: dos valores y una sola señal.",
+      "risk": "Ilegible como herramienta de trabajo.",
+      "hero": "https://impeccable.style/worlds/cards/ikeda-datamatics-hero.webp"
+    },
+    {
+      "id": "challenger-metro",
+      "label": "Mosaicos Metro",
+      "verdict": "declined",
+      "lineage": "interfaces de mosaicos planos y tipografía gigante",
+      "thesis": "La tipografía es la interfaz; los colores planos son contenido.",
+      "palette": [
+        "#000000",
+        "#1ba1e2",
+        "#ffffff"
+      ],
+      "materials": [
+        "mosaicos planos",
+        "minúsculas gigantes"
+      ],
+      "viewport": "Panorama de mosaicos, uno por página.",
+      "case": "Encaja mal: recortar los nombres de destino rompe justo lo que hay que leer.",
+      "kept": "Escala tipográfica valiente: el destino a tamaño de cartel.",
+      "risk": "Nostalgia de una plataforma concreta.",
+      "hero": "https://impeccable.style/worlds/cards/digital-design-canon-metro-typographic-tiles-hero.webp"
+    },
+    {
+      "id": "challenger-streaming",
+      "label": "Muro de carteles",
+      "verdict": "declined",
+      "lineage": "catálogos de plataformas de streaming",
+      "thesis": "Cada página como un cartel; el enfocado crece y se explica.",
+      "palette": [
+        "#0e0e10",
+        "#e50914",
+        "#ffffff"
+      ],
+      "materials": [
+        "carteles a sangre",
+        "filas horizontales"
+      ],
+      "viewport": "Filas de vistas previas, la enfocada ampliada.",
+      "case": "Encaja a medias: las vistas previas son visuales, pero el destino queda escondido.",
+      "kept": "La fila enfocada se expande y el resto se aparta.",
+      "risk": "Prioriza la imagen sobre el destino.",
+      "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-streaming-title-card-wall-hero.webp"
+    },
+    {
+      "id": "challenger-labanotation",
+      "label": "Partitura de danza",
+      "verdict": "declined",
+      "lineage": "notación Laban",
+      "thesis": "La forma y el relleno codifican el significado.",
+      "palette": [
+        "#ffffff",
+        "#111111",
+        "#d9d9d9"
+      ],
+      "materials": [
+        "papel pautado",
+        "bloques sombreados"
+      ],
+      "viewport": "Pentagrama central con columnas simétricas.",
+      "case": "Encaja mal: el público no lee notación de movimiento.",
+      "kept": "La forma codifica el tipo de destino.",
+      "risk": "Críptico sin aprendizaje previo.",
+      "hero": "https://impeccable.style/worlds/cards/notation-diagram-systems-labanotation-hero.webp"
+    },
+    {
+      "id": "challenger-centre-rail",
+      "label": "Edición de referencia",
+      "verdict": "declined",
+      "lineage": "ediciones con carril central y margen de notas",
+      "thesis": "Dos columnas alrededor de un carril de claves, todo trazado a un píxel.",
+      "palette": [
+        "#1a1a1a",
+        "#f2ebdd",
+        "#c0392b"
+      ],
+      "materials": [
+        "tinta de hierro",
+        "papel hueso"
+      ],
+      "viewport": "Bloque de texto pequeño en un margen amplio.",
+      "case": "Encaja mal: es una forma de lectura, no de operación rápida desde el móvil.",
+      "kept": "Un sistema de filetes de un píxel, cada línea deliberada.",
+      "risk": "Demasiado editorial para una herramienta.",
+      "hero": "https://impeccable.style/worlds/cards/rw-centre-rail-reference-setting-hero.webp"
+    }
+  ],
+  "reroll": {
+    "registers": [
+      "safer",
+      "bolder"
+    ]
+  },
+  "buildPath": {
+    "value": "code"
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "El estándar de la categoría",
+    "thesis": "Un panel de administración limpio, ejecutado al nivel de los mejores.",
+    "palette": [
+      "#ffffff",
+      "#0f172a",
+      "#2563eb"
+    ],
+    "materials": [
+      "rejilla limpia",
+      "tabla y barra lateral"
+    ],
+    "viewport": "Barra lateral, tabla de páginas y panel de detalle.",
+    "risk": "Indistinguible de cualquier otro panel, por diseño."
+  },
+  "steer": true
+}

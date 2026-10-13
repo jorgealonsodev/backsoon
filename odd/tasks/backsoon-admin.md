@@ -1,0 +1,125 @@
+# Backsoon admin panel
+Objective: build the backsoon-admin panel (PRD U4–U6) on top of the verified U0–U3 walking skeleton; UI designed with /impeccable. CI (U7) and production deploy (U8) stay out of this feature.
+Branch: feat/backsoon-admin from local main fe6e9b2 (remote has no branches). Local commits only; no push/PR/merge.
+Checks: go test ./... (admin), make lint, make test, make e2e (18080/18181 overrides); browser checks at 320/1280 light/dark.
+
+## Specs
+### S1 — Original request (verbatim)
+> haz el panel con /impeccable
+
+### S2 — Panel functional rules (verbatim PRD §5.2)
+### 5.2 Panel de gestión (`backsoon-admin`)
+
+| ID | Requisito | Prioridad | Criterio de aceptación | CA |
+|---|---|---|---|---|
+| RF-13 | **Acceso solo con usuario y contraseña.** Un único administrador definido por variables de entorno del stack de Portainer (§7.7). Ninguna vista ni endpoint del panel, salvo `/login` y `/healthz`, responde sin sesión válida. | Debe | Sin sesión, cualquier ruta redirige a `/login` (HTML) o devuelve 401 (peticiones `fetch`). | CA-17 |
+| RF-14 | **Listado de páginas** (solo con sesión): todas las páginas con nombre, destinos asignados (dominios y servicio:puerto), fecha de última modificación, vista previa y acciones (editar, reemplazar HTML, borrar). La página por defecto aparece siempre y no se puede borrar. | Debe | Con 3 páginas creadas, el listado muestra las 3 más la página por defecto con sus destinos. | CA-18 |
+| RF-15 | **Subir página:** subir un fichero `.html` (máx. 512 KB, UTF-8) o crearla desde la plantilla rellenando nombre de aplicación, mensaje, idioma e icono. | Debe | Ambas vías crean una página visible en el listado y servida por `backsoon`. | CA-19 |
+| RF-16 | **Asignar destinos:** cada página tiene uno o más destinos. Tipos: dominio (`^[a-z0-9.-]+$`, se normaliza a minúsculas) o servicio:puerto (`^[a-z0-9.-]+:[0-9]{1,5}$`, puerto 1-65535). Un destino pertenece a una sola página: asignarlo a otra exige confirmación y lo quita de la anterior. | Debe | Destinos inválidos se rechazan con mensaje; un destino duplicado pide confirmación. | CA-20 |
+| RF-17 | **Validación de contenido** al subir: rechazar si no es UTF-8 o supera el tamaño; **avisar** (y pedir confirmación) si contiene recursos externos (RF-11) o `<script>`. | Debe | Un HTML con `<link href="https://…">` muestra el aviso. | CA-14, CA-19 |
+| RF-18 | **Vista previa segura:** la página se muestra en un `<iframe sandbox>` sin `allow-scripts` y con CSP restrictiva, para que un HTML subido no pueda ejecutar código en el origen del panel. | Debe | Un HTML con `<script>alert(1)</script>` no ejecuta nada en la vista previa. | CA-21 |
+| RF-19 | **Editar y borrar:** cambiar destinos, reemplazar el HTML o borrar una página. Borrar libera sus destinos (pasan a la página por defecto). | Debe | Tras borrar, `curl` con ese destino sirve `default.html`. | CA-6 |
+| RF-20 | **Publicación atómica:** el panel escribe los ficheros que lee `backsoon` con escritura a fichero temporal + `rename`, para que nunca se sirva una página a medio escribir. | Debe | Revisión de código + test unitario. | CA-22 |
+
+> RF-9 (script `new-page.sh`) se elimina: lo sustituye el panel.
+
+### S3 — Panel non-functional rules (verbatim PRD §6 rows)
+| RNF-2 | **Huella:** `backsoon` < 10 MB de RAM en reposo; `backsoon-admin` < 50 MB de RAM y imagen < 30 MB. | `docker stats --no-stream`, `docker image ls`. | CA-15 |
+| RNF-3 | **Disponibilidad:** ambos contenedores con `restart: unless-stopped` y `healthcheck` (`GET /healthz` → 200). Ninguno depende de las aplicaciones que protege. | Inspección del compose. | CA-8 |
+| RNF-4 | **Degradación segura:** (a) si `backsoon-admin` está parado, `backsoon` sigue sirviendo páginas; (b) si `backsoon` está parado o no existe, NPM **arranca, recarga** y sirve todas las aplicaciones; solo se pierde la página amable (vuelve el 502 de NPM). Requiere `proxy_pass` por variable (resolución DNS en cada petición). | Los tres escenarios. | CA-5, CA-16 |
+| RNF-8 | **Seguridad del panel:** contraseña guardada como hash bcrypt; sin credenciales configuradas, el panel **no arranca**; máximo 5 intentos fallidos por IP cada 15 min; cookie de sesión `HttpOnly`, `Secure`, `SameSite=Strict`, caducidad 12 h; token CSRF en toda petición que modifica; sin puertos publicados (se accede por NPM con HTTPS). | CA-17, CA-21, CA-24. | CA-17, CA-24 |
+| RNF-9 | **Observabilidad:** `X-Backsoon: 1` en toda respuesta de mantenimiento; `backsoon` registra `host destino status fichero` (sin IP de cliente); el panel registra login correcto/fallido y cada alta/cambio/borrado. En NPM el fallback se identifica por `$upstream_status` `"502, 503"`. | `docker logs`. | CA-1 |
+Scope note: only the panel (backsoon-admin) parts of these rows are new here; backsoon service parts were closed in the walking skeleton.
+
+### S4 — Panel design (verbatim PRD §7.7)
+### 7.7 Panel `backsoon-admin`
+
+**Tecnología (decidida, D6):** binario Go con solo la biblioteca estándar (`net/http`, `html/template`, `embed`) más `golang.org/x/crypto/bcrypt`, en imagen `distroless/static`. Sin base de datos: metadatos en un fichero JSON. *Motivo:* imagen pequeña, un único binario y poca superficie de ataque.
+
+**Variables de entorno (stack de Portainer):**
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `BACKSOON_ADMIN_USER` | Sí | Usuario administrador. |
+| `BACKSOON_ADMIN_PASSWORD_HASH` | Sí (o la siguiente) | Hash bcrypt de la contraseña. Recomendado. |
+| `BACKSOON_ADMIN_PASSWORD` | Alternativa | Contraseña en claro. Se acepta, pero el panel lo avisa en el log al arrancar. Si están las dos, gana el hash. |
+| `BACKSOON_SESSION_SECRET` | Sí | Secreto aleatorio (≥ 32 bytes) para firmar sesiones. |
+| `BACKSOON_REFRESH` | No (10) | Intervalo de recarga. Compartida con `backsoon`. |
+
+Sin `BACKSOON_ADMIN_USER`, sin contraseña o sin `BACKSOON_SESSION_SECRET`, el panel termina con código ≠ 0 y un mensaje claro: nunca queda accesible sin login. Para cambiar la contraseña se cambia la variable y se redespliega.
+
+**Vistas:**
+
+| Ruta | Sesión | Contenido |
+|---|---|---|
+| `GET /login`, `POST /login` | No | Formulario de acceso. |
+| `POST /logout` | Sí | Cierra la sesión. |
+| `GET /` | Sí | **Listado de páginas** (RF-14): nombre, destinos, última modificación, vista previa, acciones. |
+| `GET /pages/new`, `POST /pages` | Sí | Subir HTML o crear desde plantilla, y asignar destinos (RF-15, RF-16). |
+| `GET /pages/{id}`, `POST /pages/{id}` | Sí | Editar destinos o reemplazar el HTML. |
+| `POST /pages/{id}/delete` | Sí | Borrar (no disponible para la página por defecto). |
+| `GET /pages/{id}/preview` | Sí | HTML servido con `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:` para el iframe (RF-18). |
+| `GET /healthz` | No | 200. |
+
+**Modelo y publicación:**
+
+- `backsoon_meta/sites.json` guarda las páginas: `{id, name, targets: [{type: host|target, value}], updated_at}`. El HTML original de cada página está en `backsoon_meta/pages/<id>.html`.
+- Cada cambio **publica** en `backsoon_pages` (escritura temporal + `rename`, RF-20): `host/<dominio>.html` y `target/<servicio>_<puerto>.html` por cada destino de la página, y `default.html`. Los ficheros de destinos que ya no existen se borran.
+- Al arrancar, el panel vuelve a publicar todo desde `sites.json` (así se recupera de cualquier inconsistencia) y crea `default.html` desde la plantilla si no existe.
+
+### S5 — Networks and page template (verbatim PRD §7.5, §7.6)
+### 7.5 Redes
+
+- Se crea la red externa `proxy`, y **el contenedor de NPM debe estar conectado a ella** (cambio en el stack de NPM).
+- `backsoon` y `backsoon-admin` se unen a `proxy` y no publican puertos.
+- El panel se publica con un proxy host de NPM (p. ej. `backsoon.midominio.com` → `backsoon-admin:8080`) con certificado SSL. Se puede restringir además con una Access List de NPM.
+
+### 7.6 Plantilla de página
+
+Cada página es un HTML autocontenido. La plantilla (`templates/maintenance.html`, que el panel usa para "crear desde plantilla" y para generar `default.html`) cumple:
+
+- **Autocontención:** CSS inline, fuentes del sistema, sin scripts. Imagen solo como emoji, SVG inline o `data:` URI. Objetivo < 10 KB.
+- **Comportamiento:** `<meta http-equiv="refresh" content="{{REFRESH}}">` con el mismo valor que `Retry-After`; enlace visible "Reintentar ahora" (`<a href="">`); `<meta name="robots" content="noindex">`.
+- **Accesibilidad y presentación:** `<html lang="{{LANG}}">` (por defecto `es`), `<title>`, un único `<h1>`, contraste AA, `<meta name="viewport">`, legible desde 320 px, modo oscuro con `prefers-color-scheme`, sin animaciones (o respetando `prefers-reduced-motion`).
+- **Contenido:** nombre de la aplicación, icono opcional, mensaje "Volvemos en breve" más una línea explicativa, y aviso de que la página se actualiza sola.
+- **Sin información interna:** ni códigos de error, ni versión de nginx, ni IP/puerto, ni rutas, ni la URI original. `default.html` no nombra ninguna aplicación ("Este servicio").
+- **Variables:** `{{APP_NAME}}`, `{{MESSAGE}}`, `{{REFRESH}}`, `{{LANG}}`, `{{ICON}}`. El panel escapa en HTML los valores que introduce el usuario.
+
+### S6 — Units (verbatim PRD §9)
+| U4 | Panel, núcleo: autenticación con variables de entorno (RF-13, RNF-8), modelo `sites.json` y publicación atómica (RF-20), con tests unitarios. | U0 | `go test ./...` cubre: rechazo sin credenciales, bcrypt, rate limit, CSRF, validación de destinos, publicación y limpieza de ficheros. | `make test` → 0 |
+| U5 | Panel, vistas: listado (RF-14), alta/subida/plantilla (RF-15), destinos (RF-16), validación (RF-17), vista previa (RF-18), edición y borrado (RF-19). | U4 | CA-17 … CA-22 pasan contra `compose.test.yml`. | `make e2e` → 0 |
+| U6 | Integración panel ↔ `backsoon`: CA-6 (alta, cambio y borrado desde el panel, visibles sin reiniciar). | U3, U5 | `e2e.sh` crea una página por la API del panel, para `app1` y recibe esa página. | `make e2e` → 0 |
+
+### S7 — Acceptance criteria (verbatim PRD §10)
+| CA-6 | Desde el panel: crear página para `nueva.test`, modificarla y borrarla, sin reiniciar nada. | Cada cambio se ve en la siguiente petición; tras borrarla, `default.html`. |
+| CA-7 | Redespliegue real desde Portainer de una aplicación que tarda > 10 s en arrancar. | El visitante ve mantenimiento todo el tiempo y entra en la aplicación al terminar (manual). |
+| CA-14 | `grep -E '<script src\|<link \|@import\|url\(http'` sobre `templates/` y `default.html`; subir un HTML con `<link href="https://…">`. | Sin coincidencias; el panel muestra el aviso. |
+| CA-16 | Con `backsoon` parado: `docker exec npm nginx -t`, `nginx -s reload` y `docker restart npm`. | Todo correcto; todas las aplicaciones responden. Con el panel parado, `backsoon` sigue sirviendo páginas. |
+| CA-17 | Sin sesión: `GET /`, `GET /pages/new`, `POST /pages`. Arrancar el panel sin `BACKSOON_ADMIN_USER`. | Redirección a `/login` o 401; el panel no arranca (código ≠ 0). |
+| CA-18 | Crear 3 páginas con destinos variados y abrir `/`. | Listado con las 3 + la página por defecto, sus destinos, fecha y vista previa. |
+| CA-19 | Subir un `.html` válido; subir uno de 600 KB; subir uno que no es UTF-8; crear una desde la plantilla. | Alta correcta; rechazo; rechazo; alta correcta. |
+| CA-20 | Destinos `APP.Test`, `app:99999`, `a b`, y un destino ya asignado. | Se normaliza a `app.test`; rechazo; rechazo; pide confirmación y lo mueve. |
+| CA-21 | Vista previa de un HTML con `<script>alert(1)</script>`; `POST` sin token CSRF. | No se ejecuta nada; 403. |
+| CA-22 | Test unitario de publicación con un fallo a mitad de escritura. | Nunca queda un fichero parcial en `backsoon_pages`. |
+| CA-24 | 6 logins fallidos seguidos desde la misma IP. | El sexto se rechaza aunque la contraseña sea correcta, hasta pasados 15 min. |
+Scope note: CA-7 (real Portainer redeploy) is U8 and manual; not claimed here.
+
+### S8 — Explicit user decisions
+- Panel UI language: “Inglés”.
+- Audience: “Open source para otros”.
+- Devices: “Escritorio y móvil por igual”.
+- Design start: “Primero imagen de referencia” (comp-first), then — no image generation available in this environment — “Directamente en código” (code-first; no external Stitch).
+- main: “Integrar U0–U3 en main” → local main created at fe6e9b2, no push.
+
+## Tasks
+- T1 | S1,S8 | inline: /impeccable init (PRODUCT.md) + new-work direction round (code-led) and direction contract; browser screenshots instead of comps | done | commit: see L6
+- T2 | S2–S4,S6(U4),S7(CA-17,CA-20,CA-22,CA-24) | in_progress: worker mv75udhl-d-4cls | delegated worker in parallel with T1 (disjoint: admin/internal/{config,auth,pages,publish}): env config, bcrypt, sessions, CSRF, rate limit, sites.json model, target validation, atomic publish + cleanup, go tests | pending | commit: pending
+- T3 | S2–S5,S6(U5),S7(CA-14,CA-17–CA-21) | after T1+T2: web handlers, html/template views per approved comp, preview CSP, Dockerfile (distroless/static), compose services, make test/e2e wiring | pending | commit: pending
+- T4 | S2,S6(U6),S7(CA-6,CA-16) | after T3: panel ↔ backsoon e2e (create/modify/delete via panel API visible without restarts), README panel usage + bcrypt hash guide, env.example wiring | pending | commit: pending
+
+## Log
+L1 — User request: “haz el panel con /impeccable”. Preceded by “si” to “¿Quieres que prepare la integración en main o que empiece con el panel de administración?”, clarified as “Integrar U0–U3 en main”; local main created at fe6e9b2 (fast-forward pointer, remote empty, no push).
+L2 — impeccable context: NO_PRODUCT_MD / PRODUCT_INIT_REQUIRED; no visual implementation for the panel. Init interview answered: English UI, open source for others, desktop and mobile equally, comp-first.
+L3 — Large task (several sessions, separate deliverables). Branch feat/backsoon-admin created from main. Go 1.26.9 available locally; admin/go.mod declares module github.com/jorgealonsodev/backsoon/admin, go 1.26.
+L4 — PRODUCT.md and .impeccable/config.json written. No image models available (models.getAvailableOfType("image") = [], impeccable reported no IMAGE_GEN). User chose “Directamente en código” over Google Stitch; buildPath set to code. T2 core worker mv75udhl-d-4cls launched in background (allowed: admin/internal/{config,auth,pages,publish}/**, admin/go.mod, admin/go.sum).
+L5 — Surface questions: main task “Comprobar qué página ve un destino”; volume “Pocas (1–10)”; avoid “Parecer un SaaS genérico”. concept-seed efa48271 (operate) assigned grounded candidate 4 of 7 (lobby directory board); decision page answer: {"optionId":"assigned","buildPath":"code"}. Direction contract recorded in .impeccable/surfaces/admin-internal-web.md (target admin/internal/web). DESIGN.md is owed at the finish review (T3), not before.
