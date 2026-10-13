@@ -60,7 +60,7 @@ if printf '%s\n' "$serving" | grep -q 'read_only: true' && printf '%s\n' "$servi
 # --- image pin and page hygiene --------------------------------------------------
 if grep -Eq '^FROM nginx:[0-9]+\.[0-9]+\.[0-9]+-alpine-slim@sha256:[0-9a-f]{64}$' nginx/Dockerfile; then pass "nginx image is pinned (version + digest)"; else fail "nginx image is pinned (version + digest)"; fi
 if grep -rEn '<script src|<link |@import|url\(http' templates/; then fail "templates are self-contained (CA-14)"; else pass "templates are self-contained (CA-14)"; fi
-for f in test/lint.sh test/unit.sh test/seed-race.sh test/service-lib.sh test/service-cases.sh nginx/docker-entrypoint.d/*.sh; do
+for f in test/*.sh nginx/docker-entrypoint.d/*.sh; do
   check "sh -n $f" sh -n "$f"
 done
 

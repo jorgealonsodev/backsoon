@@ -10,3 +10,4 @@ coverage.out
 
 # Verifier scratch artifacts (not source)
 .odd-checks/
+.playwright-mcp/

@@ -45,12 +45,15 @@ services:
     networks: [testnet]
     labels: *test-label
 
-  # Optional (profile "backsoon"): needs nginx/default.conf.template from the
-  # service unit (override the path with BACKSOON_TEST_TEMPLATE). It serves the
-  # test "pages" volume read-only; no published ports.
+  # Same Dockerfile/config/entrypoint as production, but isolated test pages
+  # and networks. The optional template override remains available.
   backsoon:
     profiles: [backsoon]
-    image: nginx:1.30.5-alpine-slim
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    image: ${BACKSOON_TEST_PROJECT:-backsoon-e2e}-service:local
+    pull_policy: build
     environment:
       BACKSOON_REFRESH: "${BACKSOON_REFRESH:-10}"
     volumes:
@@ -69,6 +72,25 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    networks: [testnet]
+    labels: *test-label
+
+  # Controlled upstream status fixture: no published ports or production state.
+  app-errors:
+    profiles: [tools]
+    image: nginx:1.30.5-alpine-slim@sha256:32463212baf0e7d91aded2e9b843a4f2b9e017804b8c9d5bae7b51dcef64389c
+    volumes:
+      - type: bind
+        source: ./test/fixtures/error-backend.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     networks: [testnet]
     labels: *test-label
 

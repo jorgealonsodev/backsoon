@@ -1,0 +1,6 @@
+# The static-service build needs only these sources, never secrets/test logs.
+*
+!nginx/
+!nginx/**
+!templates/
+!templates/maintenance.html
