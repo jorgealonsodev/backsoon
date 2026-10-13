@@ -1,8 +1,10 @@
 # backsoon
 
+![backsoon: when an app behind Nginx Proxy Manager is redeploying, visitors see its own maintenance page (503 with Retry-After, same URL) instead of NPM's generic 502 Bad Gateway](docs/assets/hero.png)
+
 A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an upstream is down, NPM hands the request to `backsoon`, a static nginx that answers `503` with the right page for that domain or destination. Design and requirements live in [PRD.md](PRD.md).
 
-> **Status: in development.** Static `backsoon` and the NPM global snippet are verified (local end-to-end acceptance and independent functional verification; the snippet was left without native review by the owner after a tooling failure, which is not native approval). The `backsoon-admin` panel is implemented and passed its end-to-end suite (388 checks through real NPM) and an independent verification. No production deployment or merge has been performed. CI and the full Portainer installation guide remain to be done.
+> **Status: in development.** Static `backsoon` and the NPM global snippet are verified (local end-to-end acceptance and independent functional verification; the snippet was left without native review by the owner after a tooling failure, which is not native approval). The `backsoon-admin` panel is implemented and passed its end-to-end suite (388 checks through real NPM) and an independent verification. No production deployment has been performed. The installation guide ([docs/install.md](docs/install.md)) was rehearsed on an isolated host and network, without TLS or the real Portainer and NPM interfaces. The CI workflow runs lint and tests on every push; the end-to-end suites run on demand.
 
 | Piece | State |
 |-------|-------|
@@ -10,7 +12,19 @@ A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an u
 | Local NPM test harness (`compose.test.yml`, [docs/npm-harness.md](docs/npm-harness.md)) | separate unit, see its doc |
 | `npm/server_proxy.conf` and `make e2e` (`test/e2e.sh`) | local acceptance and independent functional checks passed; owner-authorized native-review omission |
 | `backsoon-admin` panel (`admin/`, `make e2e-admin`) | implemented; end-to-end and independent verification passed |
-| CI | **not yet** |
+| CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) | lint and test on every push and pull request; `make e2e` on manual dispatch |
+| Installation guide ([docs/install.md](docs/install.md)) | written; clean-host rehearsal passed (CA-23), production not yet |
+
+## Install
+
+To run backsoon next to your Nginx Proxy Manager (NPM), follow the **[installation guide](docs/install.md)**. It takes four steps and works with Portainer or plain `docker compose`:
+
+1. Create the external `proxy` network and attach NPM to it.
+2. Deploy the stack: it builds its own images from this repository and publishes no ports. Credentials are in [Configuration](#configuration) and [Admin panel](#admin-panel).
+3. Install [`npm/server_proxy.conf`](npm/server_proxy.conf) in NPM, validate and reload.
+4. Publish the panel through an NPM proxy host, log in and create the pages.
+
+The guide also covers [verification](docs/install.md#verification), [what happens when `backsoon` or the panel is stopped](docs/install.md#when-backsoon-or-the-panel-is-stopped), [rollback](docs/install.md#rollback) and [what to do after updating NPM](docs/install.md#after-updating-npm).
 
 ## Quick path: try the service on its own
 
@@ -165,4 +179,4 @@ Use free loopback ports. `make e2e` requires a fresh `backsoon-*` project, seeds
 
 RNF-5 uses eight alternating blocks A/B/A/B/A/B/A/B (A: global file disabled, B: canonical file enabled), a worker-generation barrier at each switch, 20 discarded and 50 recorded healthy requests per block (200 records per mode), and the PRD's gate `median(B) ≤ median(A) × 1.05` over all records. All block medians and the aggregate are printed, all samples are kept under gitignored `.odd-checks/`, no healthy request may add a `backsoon` access-log line, and the run ends with the canonical file enabled. It is evaluated once per run, not retried until it passes. The recorded local acceptance passed 111 checks; a separate isolated functional-only verification passed 101 checks without repeating the benchmark. All eight blocks gave aggregate medians of 484 µs (A) and 474.5 µs (B), a −1.9628% difference, satisfying the 5% gate for that run. This is not evidence of a universal speedup. The earlier serial run's +5.47% failure is retained, not hidden.
 
-The panel and its publication/API/security checks, CI, a full Portainer installation, and real production redeploy checks remain deferred to U4–U8. Static-page browser checks cover 320/1280 px in light/dark mode; the manual browser recovery timing in CA-2 has not been verified. TLS and physical-device testing are not part of the local NPM harness.
+Real production redeploy checks remain deferred to U8; the installation guide's rehearsal limits are listed in [what has been verified](docs/install.md#what-has-been-verified). Static-page browser checks cover 320/1280 px in light/dark mode; the manual browser recovery timing in CA-2 has not been verified. TLS and physical-device testing are not part of the local NPM harness.
