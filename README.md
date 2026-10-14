@@ -1,3 +1,5 @@
+**English** | [Español](README.es.md)
+
 # backsoon
 
 ![backsoon: when an app behind Nginx Proxy Manager is redeploying, visitors see its own maintenance page (503 with Retry-After, same URL) instead of NPM's generic 502 Bad Gateway](docs/assets/hero.png)
@@ -17,14 +19,15 @@ A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an u
 
 ## Install
 
-To run backsoon next to your Nginx Proxy Manager (NPM), follow the **[installation guide](docs/install.md)**. It takes four steps and works with Portainer or plain `docker compose`:
+The common case is a Portainer Git stack next to your Nginx Proxy Manager (NPM), with the NPM fallback installed automatically. Follow the **[quick path in the installation guide](docs/install.md#quick-path-portainer-git-stack)**. In short:
 
-1. Create the external `proxy` network and attach NPM to it.
-2. Deploy the stack: it builds its own images from this repository; `backsoon` publishes no ports and the panel only `127.0.0.1:8181` by default. Credentials are in [Configuration](#configuration) and [Admin panel](#admin-panel).
-3. Install [`npm/server_proxy.conf`](npm/server_proxy.conf) in NPM: automatically on every deploy with `BACKSOON_NPM_CUSTOM_DIR`, or by hand. NPM applies it at its next reload.
-4. Publish the panel through an NPM proxy host, log in and create the pages.
+1. Find the Docker network NPM shares, its address range and NPM's data folder on the host.
+2. Generate the password hash and the session secret, and set the variables ([Configuration](#configuration), [Admin panel](#admin-panel)).
+3. Deploy the stack in Portainer: it builds its own images from this repository.
+4. Create the panel's NPM proxy host (`backsoon-admin:8080`, SSL, Force SSL); saving it activates the fallback.
+5. Stop an application to see its maintenance page.
 
-The guide also covers [verification](docs/install.md#verification), [what happens when `backsoon` or the panel is stopped](docs/install.md#when-backsoon-or-the-panel-is-stopped), [rollback](docs/install.md#rollback) and [what to do after updating NPM](docs/install.md#after-updating-npm).
+The [reference part of the guide](docs/install.md#reference) covers plain `docker compose`, the manual snippet install, [verification](docs/install.md#verification), [what happens when `backsoon` or the panel is stopped](docs/install.md#when-backsoon-or-the-panel-is-stopped), [rollback](docs/install.md#rollback) and [what to do after updating NPM](docs/install.md#after-updating-npm).
 
 ## Quick path: try the service on its own
 
