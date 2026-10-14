@@ -181,10 +181,12 @@ func TestPanelPagesInlineTheStylesheet(t *testing.T) {
 		mustContainRaw(t, body, "font-variant-numeric", "prefers-color-scheme: dark", "prefers-reduced-motion", "caret-color",
 			"::selection", "scrollbar-color", "text-underline-offset", "accent-color",
 			`system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif`, "ui-monospace")
-		mustNotContainRaw(t, strings.ReplaceAll(body, `<link rel="icon" href="data:,">`, ""), "<link", "@import", "url(http", "@font-face", "Archivo", "Martian")
+		mustNotContainRaw(t, faviconRe.ReplaceAllString(body, ""), "<link", "@import", "url(http", "@font-face", "Archivo", "Martian")
 		_ = name
 	}
 }
+
+var faviconRe = regexp.MustCompile(`<link rel="icon" type="image/svg\+xml" href="data:image/svg\+xml,[^"]*">`)
 
 // The self-hosted fonts are gone: their route no longer exists, behind the session gate.
 func TestFontsRouteIsGone(t *testing.T) {
@@ -204,8 +206,8 @@ func TestDateIsAbsoluteUTC(t *testing.T) {
 	mustContain(t, hn.get("/", hn.login()).Body.String(), `<time datetime="2026-10-15T00:01:30Z">2026-10-15 00:01 UTC</time>`)
 }
 
-// Browsers ask for /favicon.ico on every page; an inline icon keeps the console clean without
-// opening a route outside the session gate.
+// Browsers ask for /favicon.ico on every page; the panel logo as an inline SVG icon gives the tab
+// its icon without opening a route outside the session gate.
 func TestEveryLayoutDeclaresAnInlineFavicon(t *testing.T) {
 	hn := newHarness(t)
 	s := hn.login()
@@ -215,7 +217,11 @@ func TestEveryLayoutDeclaresAnInlineFavicon(t *testing.T) {
 		"edit":      hn.get("/pages/default", s),
 		"404":       hn.get("/pages/none", s),
 	} {
-		mustContain(t, w.Body.String(), `<link rel="icon" href="data:,">`)
+		body := w.Body.String()
+		mustContainRaw(t, body, `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,`)
+		mustNotContainRaw(t, body, `<link rel="icon" href="data:,">`, "ZgotmplZ")
+		// The icon is the panel logo: the orange tile and the return arrow.
+		mustContainRaw(t, body, "fill='%23ea580c'", "M8.5 8.5 6.5 10.5l2 2M6.5 10.5H13a3.5 3.5 0 0 1 0 7h-2")
 		if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "img-src 'self' data:") {
 			t.Errorf("%s: CSP does not allow data: icons: %s", name, csp)
 		}
