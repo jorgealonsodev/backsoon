@@ -69,6 +69,10 @@ func TestPlaintextIsHashedAndReported(t *testing.T) {
 	if bcrypt.CompareHashAndPassword(cfg.PasswordHash, []byte("hunter2hunter2")) != nil {
 		t.Fatal("generated hash does not match the plaintext")
 	}
+	// Same cost as panel users and the unknown-user dummy, so sign-in timing does not single out the owner.
+	if cost, err := bcrypt.Cost(cfg.PasswordHash); err != nil || cost != 12 {
+		t.Fatalf("generated hash cost = %d (%v), want 12", cost, err)
+	}
 }
 
 // CA-17: the panel must refuse to start without credentials or secret.

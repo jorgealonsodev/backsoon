@@ -42,6 +42,10 @@ const (
 	EnvTrustedProxies = "BACKSOON_TRUSTED_PROXIES"
 )
 
+// PlaintextHashCost is the bcrypt cost for a plaintext BACKSOON_ADMIN_PASSWORD: the same as panel
+// users (users.Cost), so a failed sign-in takes as long whatever the user name.
+const PlaintextHashCost = 12
+
 // MinSecretBytes is the minimum length of the session secret.
 const MinSecretBytes = 32
 
@@ -145,7 +149,7 @@ func loadPassword(cfg *Config, getenv func(string) string) error {
 	if password == "" {
 		return fmt.Errorf("%s or %s is required", EnvPasswordHash, EnvPassword)
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), PlaintextHashCost)
 	if err != nil {
 		// bcrypt rejects passwords over 72 bytes; the error text never includes the password.
 		return fmt.Errorf("%s cannot be hashed (bcrypt accepts at most 72 bytes): use %s instead", EnvPassword, EnvPasswordHash)
