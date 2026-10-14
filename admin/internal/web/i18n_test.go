@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/jorgealonsodev/backsoon/admin/internal/pages"
 )
 
 const langCookie = "backsoon_lang"
@@ -97,10 +99,9 @@ var englishWords = map[string]bool{
 // leftoverEnglish returns the English words found in the text a reader (or a screen reader) gets
 // from body: text nodes plus aria-label, title and placeholder attributes.
 func leftoverEnglish(body string) []string {
-	// Data is not panel copy: what was typed into a field, and the stored name of the seeded page.
+	// Data is not panel copy: what was typed into a field.
 	body = styleRe.ReplaceAllString(body, "")
 	body = textareaRe.ReplaceAllString(body, "<textarea></textarea>")
-	body = strings.ReplaceAll(body, "Default page", "")
 	var texts []string
 	for _, m := range textAttrRe.FindAllStringSubmatch(body, -1) {
 		texts = append(texts, m[1])
@@ -664,3 +665,66 @@ func TestLogsStayEnglish(t *testing.T) {
 		}
 	}
 }
+
+// The seeded default page is stored as "Default page"; while it keeps that name the panel shows it
+// in the language of the response. The stored value (and the edit field) stay as they are.
+func TestSeededDefaultPageNameIsLocalized(t *testing.T) {
+	hn := newHarness(t)
+	s := hn.login()
+	hn.createPage("Alpha", "app.test")
+	const es = "Página predeterminada"
+
+	for name, w := range map[string]*httptest.ResponseRecorder{
+		"directory":     hn.getL("/", s, "es"),
+		"lookup miss":   hn.getL("/?lookup=zzz.test", s, "es"),
+		"lookup focus":  hn.getL("/?focus=default&lookup=zzz:81", s, "es"),
+		"edit default":  hn.getL("/pages/default", s, "es"),
+		"delete others": hn.postFormL("/pages/"+hn.store.List()[1].ID+"/delete", s, url.Values{}, "es"),
+	} {
+		body := w.Body.String()
+		mustContain(t, body, es)
+		textOnly := textareaRe.ReplaceAllString(styleRe.ReplaceAllString(body, ""), "")
+		textOnly = regexp.MustCompile(`value="[^"]*"`).ReplaceAllString(textOnly, "")
+		if strings.Contains(textOnly, "Default page") {
+			t.Errorf("%s: the seeded name shows untranslated\n%s", name, excerpt(body))
+		}
+	}
+	w := hn.getL("/pages/default", s, "es")
+	mustContain(t, w.Body.String(), `value="Default page"`, "<title>Editar "+es+" · backsoon</title>", `title="Vista previa de `+es+`"`)
+
+	// English stays exactly as it was.
+	mustContain(t, hn.getL("/", s, "en").Body.String(), "Default page")
+	mustNotContain(t, hn.getL("/", s, "en").Body.String(), es)
+
+	// Confirming content warnings on the default page names it too.
+	w = hn.postMultipartL("/pages/default", s, map[string]string{"name": "Default page"},
+		&upload{name: "w.html", data: []byte(`<script>1</script>`)}, "es")
+	wantStatus(t, w, http.StatusOK)
+	mustContain(t, w.Body.String(), "“"+es+"” recibirá HTML nuevo")
+
+	// A renamed default page shows its own name in every language, and the lookup answer too.
+	if _, err := hn.store.Update("default", pages.Update{Name: ptr("Mantenimiento general")}, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, lang := range []string{"es", "en"} {
+		body := hn.getL("/?lookup=zzz.test", s, lang).Body.String()
+		mustContain(t, body, "Mantenimiento general")
+		mustNotContain(t, body, es, "Default page")
+	}
+}
+
+// Only the default page gets this treatment: a page the user names "Default page" is user data.
+func TestUserPageCalledDefaultPageStaysAsTyped(t *testing.T) {
+	hn := newHarness(t)
+	s := hn.login()
+	hn.createPage("Default page", "other.test")
+	body := hn.getL("/", s, "es").Body.String()
+	if n := strings.Count(body, `class="name" href="/pages/default"`); n != 1 {
+		t.Fatalf("default page rows = %d", n)
+	}
+	if n := strings.Count(textareaRe.ReplaceAllString(styleRe.ReplaceAllString(body, ""), ""), ">Default page<"); n != 1 {
+		t.Errorf("the user's own page called \"Default page\" appears %d times, want 1", n)
+	}
+}
+
+func ptr(s string) *string { return &s }

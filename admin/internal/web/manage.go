@@ -46,8 +46,8 @@ func (s *Server) editFormView(loc locale, sess auth.Session, site pages.Site, fo
 	iso, text := dateParts(site.UpdatedAt)
 	isDefault := site.ID == pages.DefaultID
 	return &formView{
-		base: s.base(sess, loc.T("title.edit", site.Name)), Edit: true, IsDefault: isDefault,
-		Action: "/pages/" + site.ID, PageID: site.ID, PageName: site.Name,
+		base: s.base(sess, loc.T("title.edit", displayName(loc, site.ID, site.Name))), Edit: true, IsDefault: isDefault,
+		Action: "/pages/" + site.ID, PageID: site.ID, PageName: displayName(loc, site.ID, site.Name),
 		UpdatedISO: iso, UpdatedText: text, NoDests: !isDefault && len(site.Targets) == 0,
 		Form: form, Errs: map[string][]issue{}, PreviewSrc: "/pages/" + site.ID + "/preview",
 		DeleteURL: "/pages/" + site.ID + "/delete",
@@ -429,7 +429,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		did := stash(false, moveOK)
 		s.render(w, r, http.StatusOK, "confirm", &confirmView{
 			base: s.base(sess, loc.T("title.check")), Kind: "warnings", Action: formAction(id), DraftID: did,
-			PageName: strings.TrimSpace(form.Name), Edit: edit, Warnings: warnings,
+			PageName: displayName(loc, id, strings.TrimSpace(form.Name)), Edit: edit, Warnings: warnings,
 			Dests: destsFromValues(loc, targets), BackHref: backHref(id, did),
 		})
 		return
@@ -458,7 +458,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		did := stash(true, false)
 		s.render(w, r, http.StatusConflict, "confirm", &confirmView{
 			base: s.base(sess, loc.T("title.move")), Kind: "move", Action: formAction(id), DraftID: did,
-			PageName: name, Edit: edit, Groups: s.moveGroups(loc, conflict, id), BackHref: backHref(id, did),
+			PageName: displayName(loc, id, name), Edit: edit, Groups: s.moveGroups(loc, conflict, id), BackHref: backHref(id, did),
 		})
 		return
 	case errors.Is(err, pages.ErrNotFound):
@@ -540,7 +540,7 @@ func (s *Server) moveGroups(loc locale, c *pages.ConflictError, newOwnerID strin
 		if !ok {
 			i = len(groups)
 			index[conf.OwnerID] = i
-			groups = append(groups, moveGroup{OwnerName: conf.OwnerName, OwnerID: conf.OwnerID})
+			groups = append(groups, moveGroup{OwnerName: displayName(loc, conf.OwnerID, conf.OwnerName), OwnerID: conf.OwnerID})
 			moved[conf.OwnerID] = map[pages.Target]bool{}
 		}
 		kind, isService := kindOf(loc, conf.Target)
@@ -586,14 +586,14 @@ func (s *Server) deletePage(w http.ResponseWriter, r *http.Request, sess auth.Se
 		dests = append(dests, t.Value)
 	}
 	if r.PostFormValue("confirm") != "true" {
-		defaultName := pages.DefaultName
-		if d, err := s.store.Get(pages.DefaultID); err == nil {
-			defaultName = d.Name
-		}
 		loc := localeOf(r)
+		defaultName := displayName(loc, pages.DefaultID, pages.DefaultName)
+		if d, err := s.store.Get(pages.DefaultID); err == nil {
+			defaultName = displayName(loc, d.ID, d.Name)
+		}
 		s.render(w, r, http.StatusOK, "confirm", &confirmView{
-			base: s.base(sess, loc.T("title.delete", site.Name)), Kind: "delete", Action: "/pages/" + id + "/delete",
-			PageName: site.Name, Dests: destsOf(loc, site.Targets, pages.Target{}, false),
+			base: s.base(sess, loc.T("title.delete", displayName(loc, site.ID, site.Name))), Kind: "delete", Action: "/pages/" + id + "/delete",
+			PageName: displayName(loc, site.ID, site.Name), Dests: destsOf(loc, site.Targets, pages.Target{}, false),
 			BackHref: "/pages/" + id, DefaultName: defaultName,
 		})
 		return

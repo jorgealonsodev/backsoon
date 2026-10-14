@@ -32,6 +32,16 @@ func dateParts(t time.Time) (iso, text string) {
 	return t.Format(time.RFC3339), t.Format("2006-01-02 15:04") + " UTC"
 }
 
+// displayName is the name the panel shows for a page. The seeded default page is stored as
+// pages.DefaultName; while it keeps that exact name it is shown in the language of the response.
+// The stored value is never changed, and a renamed default page (or any other page) shows its own.
+func displayName(loc locale, id, name string) string {
+	if id == pages.DefaultID && name == pages.DefaultName {
+		return loc.T("name.default")
+	}
+	return name
+}
+
 func noticeFor(loc locale, key string) *noticeView {
 	warn, ok := notices[key]
 	if !ok {
@@ -90,7 +100,7 @@ func resolveLookup(loc locale, sites []pages.Site, raw string) lookupOutcome {
 	var defaultName string
 	for _, site := range sites {
 		if site.ID == pages.DefaultID {
-			defaultName = site.Name
+			defaultName = displayName(loc, site.ID, site.Name)
 		}
 		for _, owned := range site.Targets {
 			if owned != t {
@@ -101,7 +111,7 @@ func resolveLookup(loc locale, sites []pages.Site, raw string) lookupOutcome {
 				note = loc.T("lookup.note.service")
 			}
 			out.pageID, out.target, out.targetSet = site.ID, t, true
-			out.view.Answer = &answerView{Dest: t.Value, IsService: isService, PageName: site.Name, Note: note}
+			out.view.Answer = &answerView{Dest: t.Value, IsService: isService, PageName: displayName(loc, site.ID, site.Name), Note: note}
 			return out
 		}
 	}
@@ -129,7 +139,7 @@ func (s *Server) directory(w http.ResponseWriter, r *http.Request, sess auth.Ses
 	for _, site := range sites {
 		iso, text := dateParts(site.UpdatedAt)
 		e := entryView{
-			ID: site.ID, Name: site.Name, UpdatedISO: iso, UpdatedText: text,
+			ID: site.ID, Name: displayName(loc, site.ID, site.Name), UpdatedISO: iso, UpdatedText: text,
 			IsDefault: site.ID == pages.DefaultID,
 			Dests:     destsOf(loc, site.Targets, look.target, look.targetSet),
 			Focus:     focusID != "" && site.ID == focusID,
@@ -137,7 +147,7 @@ func (s *Server) directory(w http.ResponseWriter, r *http.Request, sess auth.Ses
 		e.NoDests = !e.IsDefault && len(site.Targets) == 0
 		e.Hit = hasAnswer && look.pageID == site.ID
 		if e.Focus {
-			v.Focus = &focusView{ID: site.ID, Name: site.Name, Title: loc.T("dir.preview.title", site.Name)}
+			v.Focus = &focusView{ID: site.ID, Name: displayName(loc, site.ID, site.Name), Title: loc.T("dir.preview.title", displayName(loc, site.ID, site.Name))}
 		}
 		entries = append(entries, e)
 	}
