@@ -1,0 +1,28 @@
+# Backsoon admin panel: more users
+Objective: the panel's owner can add users who sign in and manage pages, from the panel itself.
+Branch: feat/admin-users from feat/admin-favicon (2eb02f4, favicon, not pushed yet). Delivery (push, merge) stays the user's decision.
+
+## Specs
+
+- S1 — "quiero que se puedan añadir mas usuarios que puedan acceder desde aqui" (the panel). The user chose "Dos roles (recomendada)": "Tu usuario de las variables es el propietario: gestiona usuarios y páginas, y no se puede borrar. Los usuarios nuevos solo gestionan páginas y cambian su propia contraseña." Owner = `BACKSOON_ADMIN_USER` with its password from `BACKSOON_ADMIN_PASSWORD_HASH`/`BACKSOON_ADMIN_PASSWORD` (unchanged configuration); it cannot be deleted, renamed or have its password changed from the panel. Users added in the panel are editors: they manage pages exactly like the owner does today and change their own password; they never see or reach user management.
+- S2 — The user chose "La pones tú al crearlo (recomendada)": "Escribes una contraseña inicial y se la pasas; él puede cambiarla después desde el panel." The owner creates a user with a user name and an initial password (typed twice). User names: 1–64 characters from `a-z 0-9 . _ -`, compared case-insensitively (stored lowercase), unique, never equal to the owner's name. Passwords: at least 10 characters, at most 72 bytes (bcrypt limit). Stored only as bcrypt hashes (cost 12) in `<meta>/users.json` (the `backsoon_meta` volume), written atomically with mode 0600; a corrupt or invalid file makes the panel refuse to start with a message, like `sites.json`.
+- S3 — The owner lists users (name, created, last password change), sets a new password for a user, and deletes a user, each behind a confirmation. Deleting a user or setting their password ends every session of that user immediately, also across panel restarts.
+- S4 — Every signed-in editor changes their own password by giving the current one and the new one twice; afterwards their other sessions end and the current one keeps working. The owner's panel shows where its password is configured instead of a change form.
+- S5 — Sign-in accepts the owner or any stored user, with today's rate limit and today's single error message for an unknown user or a wrong password (no user enumeration; an unknown user still costs one bcrypt comparison). Session cookies now carry the user, and a session whose user no longer exists or whose password changed is rejected. Sessions issued before this change stop working once (everyone signs in again); documented.
+- S6 — Authorization is enforced on the server: an editor's request to any user-management route answers 403 and changes nothing; every new state-changing request requires the CSRF token (403 otherwise); the navbar shows a Users entry only to the owner and the signed-in user's name for everyone. No new route is reachable without a session.
+- S7 — Logs (RNF-9): sign-ins name the user who signed in; user created, deleted and password set (actor and target) and own password changed are logged; page changes name the acting user; no line ever contains a password, a hash or a session cookie.
+- S8 — Every new text exists in English and Spanish through the existing catalogue (`admin/internal/web/catalog.go`), following the panel's design (DESIGN.md) and existing view patterns.
+- S9 — Tests through the public interface (Go and `test/admin-e2e.sh`): create, list, set password, delete, validation errors, duplicate and owner-name rejections, file mode 0600 and no plaintext in it, editor sign-in and page management, editor 403 on every user route, CSRF on every new POST, session revocation on delete, password set and own password change (other session ends, current keeps working), restart keeps users and revocations, unchanged behaviour for the owner-only setup.
+- S10 — Docs: README.md and README.es.md "Admin panel" (roles, managing users, the one-time sign-in again after upgrading), docs/install.md and docs/install.es.md where the panel's users are mentioned, env.example if a comment needs it; DESIGN.md if new components.
+
+## Tasks
+
+- T1 | S1–S2, S5 (core) | delegated worker: user store, session identity and revocation, sign-in over owner + users (admin/internal/**) | pending | commit: —
+- T2 | S3–S4, S6–S10 | delegated worker after T1: user management and own-password views, authorization, logs, i18n, e2e, docs | pending | commit: —
+- T3 | S1–S9 | independent verify (security: authentication, authorization, stored credentials) | pending | commit: —
+
+## Log
+
+L1 — User (2026-10-14), with a screenshot of the Spanish directory: "quiero que se puedan añadir mas usuarios que puedan acceder desde aqui"
+L2 — User answers: permisos "Dos roles (recomendada)"; contraseña "La pones tú al crearlo (recomendada)".
+L3 — Exploration: single user today: auth.Credentials{user, hash} (auth/credentials.go:13-25); stateless sessions without user identity "<id>.<exp>.<sig>" with in-memory revocation (auth/session.go:28-165); navbar Who and login log use the configured name s.user (web/server.go:193, web/auth.go:138); sites.json written with publish/atomic at 0644 (pages/store.go:349-369).
