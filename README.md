@@ -74,6 +74,7 @@ The example lists every variable the stack reads. Its secrets are deliberately b
 | `BACKSOON_ADMIN_HOST_PORT` | `8181` | Host port published for the panel (container port 8080). |
 | `BACKSOON_NPM_CUSTOM_DIR` | none | Host path of NPM's `/data/nginx/custom` directory, for example `/docker/nginx-proxy-manager/data/nginx/custom`. When set, the one-shot `backsoon-npm-snippet` service installs `server_proxy.conf` there on every deploy (unchanged files are left alone; a `server_proxy.conf` that is not backsoon's is never overwritten). NPM applies it at its next reload: save any proxy host or restart NPM. |
 | `BACKSOON_NPM_INTERCEPT_503` | `true` | `false` installs the variant that leaves application `503` responses alone (intercepts only `502` and `504`). |
+| `BACKSOON_NPM_RESTORE` | `false` | `true` restores NPM's default configuration: the next deploy removes backsoon's `server_proxy.conf` from `BACKSOON_NPM_CUSTOM_DIR` instead of installing it (never a file that is not backsoon's); reload NPM, then remove the stack. See [Rollback](docs/install.md#rollback). |
 | `BACKSOON_PROXY_NETWORK` | `proxy` | Name of the existing external Docker network shared with NPM, for example an NPM network such as `npm-nw`. |
 | `BACKSOON_TRUSTED_PROXIES` | none | IP addresses or CIDR ranges, separated by commas or spaces, allowed to set the `X-Real-IP` header that keys the login rate limit; set it to the `proxy` network range, for example `172.18.0.0/16`. A peer outside the list is limited by its own address. Unset, the panel believes `X-Real-IP` from any peer. An invalid entry stops the panel at start. |
 
@@ -191,7 +192,7 @@ docker exec <npm> mv /data/nginx/custom/server_proxy.conf /data/nginx/custom/ser
 docker exec <npm> nginx -t && docker exec <npm> nginx -s reload
 ```
 
-No proxy host or stored page is changed. Copy the repository file back and reload to enable it again.
+No proxy host or stored page is changed. Copy the repository file back and reload to enable it again. With the automatic install, use `BACKSOON_NPM_RESTORE=true` instead (see [Rollback](docs/install.md#rollback)); otherwise the next deploy installs the file again.
 
 ## Verification and remaining scope
 

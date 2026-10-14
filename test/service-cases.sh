@@ -378,6 +378,64 @@ backsoon-npm-snippet: ACTION NEEDED: reload Nginx Proxy Manager'
   expect_eq "directory owned by another user: nothing written" "" "$(npm_sh "$ID-npm-puid" 'ls -A /npm-custom')"
 }
 
+case_npm_restore() {
+  section "restoring NPM's default configuration (BACKSOON_NPM_RESTORE)"
+  canonical=$(sha256sum < npm/server_proxy.conf | cut -d' ' -f1)
+  dir=/docker/npm/data/nginx/custom
+
+  make_volume "$ID-rst"
+  out=$(snippet "$ID-rst" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=false 2>&1); code=$?
+  expect_eq "BACKSOON_NPM_RESTORE=false: exit 0" 0 "$code"
+  expect_has "BACKSOON_NPM_RESTORE=false: installs as before" "$out" "installed $dir/server_proxy.conf"
+  expect_eq "BACKSOON_NPM_RESTORE=false: file is canonical" "$canonical" "$(npm_sh "$ID-rst" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+
+  out=$(snippet "$ID-rst" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=maybe 2>&1); code=$?
+  if [ "$code" != 0 ]; then ok "invalid BACKSOON_NPM_RESTORE: exits non-zero ($code)"; else ko "invalid BACKSOON_NPM_RESTORE: exits non-zero" "exit 0"; fi
+  expect_has "invalid BACKSOON_NPM_RESTORE: message names the variable" "$out" 'BACKSOON_NPM_RESTORE must be true or false'
+  expect_eq "invalid BACKSOON_NPM_RESTORE: file unchanged" "$canonical" "$(npm_sh "$ID-rst" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+
+  out=$(snippet "$ID-rst" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=true 2>&1); code=$?
+  expect_eq "restore: exit 0" 0 "$code"
+  expect_has "restore: names the removed host file" "$out" "removed $dir/server_proxy.conf: NPM is back to its default configuration"
+  expect_has "restore: asks to reload NPM on a line of its own" "$out" '
+backsoon-npm-snippet: ACTION NEEDED: reload Nginx Proxy Manager'
+  expect_has "restore: says the stack can now be removed" "$out" 'you can now remove the backsoon stack'
+  expect_eq "restore: directory left empty" "" "$(npm_sh "$ID-rst" 'ls -A /npm-custom')"
+
+  out=$(snippet "$ID-rst" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=true 2>&1); code=$?
+  expect_eq "restore again: exit 0" 0 "$code"
+  expect_has "restore again: nothing to remove" "$out" "$dir/server_proxy.conf is not present: NPM already uses its default configuration"
+  expect_lacks "restore again: does not ask for a reload" "$out" 'ACTION NEEDED'
+  expect_eq "restore again: writes nothing" "" "$(npm_sh "$ID-rst" 'ls -A /npm-custom')"
+
+  make_volume "$ID-rst-var"
+  snippet "$ID-rst-var" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_INTERCEPT_503=false >/dev/null 2>&1
+  expect_has "restore the 503 variant: variant installed first" "$(npm_sh "$ID-rst-var" 'cat /npm-custom/server_proxy.conf')" 'error_page 502 504 =503 @backsoon;'
+  out=$(snippet "$ID-rst-var" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=true 2>&1); code=$?
+  expect_eq "restore the 503 variant: exit 0" 0 "$code"
+  expect_eq "restore the 503 variant: directory left empty" "" "$(npm_sh "$ID-rst-var" 'ls -A /npm-custom')"
+
+  make_volume "$ID-rst-off"
+  out=$(snippet "$ID-rst-off" -e BACKSOON_NPM_RESTORE=true 2>&1); code=$?
+  expect_eq "restore without BACKSOON_NPM_CUSTOM_DIR: exit 0" 0 "$code"
+  expect_has "restore without BACKSOON_NPM_CUSTOM_DIR: says how to remove by hand" "$out" 'BACKSOON_NPM_CUSTOM_DIR is not set: nothing removed; remove server_proxy.conf from NPM by hand, then reload NPM'
+
+  make_volume "$ID-rst-foreign"
+  npm_sh "$ID-rst-foreign" 'printf "proxy_set_header X-Mine 1;\n" > /npm-custom/server_proxy.conf'
+  out=$(snippet "$ID-rst-foreign" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=true 2>&1); code=$?
+  if [ "$code" != 0 ]; then ok "restore a foreign server_proxy.conf: exits non-zero ($code)"; else ko "restore a foreign server_proxy.conf: exits non-zero" "exit 0"; fi
+  expect_has "restore a foreign server_proxy.conf: says it was not installed by backsoon" "$out" 'not installed by backsoon: left untouched'
+  expect_eq "restore a foreign server_proxy.conf: left untouched" 'proxy_set_header X-Mine 1;' "$(npm_sh "$ID-rst-foreign" 'cat /npm-custom/server_proxy.conf')"
+
+  make_volume "$ID-rst-puid"
+  snippet "$ID-rst-puid" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" >/dev/null 2>&1
+  npm_sh "$ID-rst-puid" 'chown 1000:1000 /npm-custom && chmod 0755 /npm-custom'
+  out=$(snippet "$ID-rst-puid" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_RESTORE=true 2>&1); code=$?
+  if [ "$code" != 0 ]; then ok "restore in a directory owned by another user: exits non-zero ($code)"; else ko "restore in a directory owned by another user: exits non-zero" "exit 0"; fi
+  expect_has "restore in a directory owned by another user: says it cannot remove it" "$out" "backsoon-npm-snippet: cannot remove $dir/server_proxy.conf"
+  expect_eq "restore in a directory owned by another user: file kept" "$canonical" "$(npm_sh "$ID-rst-puid" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+}
+
 run_all_cases() {
   case_template
   case_health_and_basics
@@ -392,4 +450,5 @@ run_all_cases() {
   case_seed
   case_seed_concurrency
   case_npm_snippet
+  case_npm_restore
 }

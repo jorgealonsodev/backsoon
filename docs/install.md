@@ -308,7 +308,11 @@ docker exec <npm> mv /data/nginx/custom/server_proxy.conf /data/nginx/custom/ser
 docker exec <npm> nginx -t && docker exec <npm> nginx -s reload
 ```
 
-NPM includes the file optionally, so the reload does not fail. The `backsoon` containers may stay up or be stopped; they have no effect without the file. Restore with `docker exec <npm> mv /data/nginx/custom/server_proxy.conf.off /data/nginx/custom/server_proxy.conf` and the same `nginx -t && nginx -s reload`. To remove the stack, delete it in Portainer or run `docker compose down`; add `-v` only if you also want to delete the pages and panel data (`backsoon_pages`, `backsoon_meta`, and the empty `backsoon_npm_custom`). Removing the stack does not remove an automatically installed `server_proxy.conf`: disable it as above.
+NPM includes the file optionally, so the reload does not fail. The `backsoon` containers may stay up or be stopped; they have no effect without the file. Restore with `docker exec <npm> mv /data/nginx/custom/server_proxy.conf.off /data/nginx/custom/server_proxy.conf` and the same `nginx -t && nginx -s reload`. To remove the stack, delete it in Portainer or run `docker compose down`; add `-v` only if you also want to delete the pages and panel data (`backsoon_pages`, `backsoon_meta`, and the empty `backsoon_npm_custom`). Removing the stack does not remove an automatically installed `server_proxy.conf`: disable it as above, or restore NPM's default configuration first.
+
+#### Restore NPM's default configuration (before removing the stack)
+
+backsoon only ever adds `server_proxy.conf` to NPM's custom directory and refuses to overwrite one that is not its own, so NPM's previous state is simply that file being absent; no backup is needed. With the automatic install, set `BACKSOON_NPM_RESTORE=true` in the stack (keep `BACKSOON_NPM_CUSTOM_DIR`) and redeploy. `backsoon-npm-snippet` then removes the file instead of installing it, and `docker logs backsoon-npm-snippet` says `removed …: NPM is back to its default configuration`, or `is not present` if there was nothing to remove. It never removes a `server_proxy.conf` that does not route to `@backsoon`. Reload NPM (`docker exec <npm> nginx -t && docker exec <npm> nginx -s reload`, or save any proxy host), then remove the stack and, if you no longer need it, the panel's proxy host in NPM. As long as `BACKSOON_NPM_RESTORE=true` stays set, every deploy keeps the file away; set it back to `false` (or remove it) and redeploy to install it again.
 
 ### After updating NPM
 

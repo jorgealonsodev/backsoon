@@ -59,9 +59,10 @@ services:
   # One-shot: copies the NPM fallback into NPM's custom directory (BACKSOON_NPM_CUSTOM_DIR, the
   # host path of NPM's /data/nginx/custom); unset, it installs nothing. Offline, read-only and
   # without capabilities. backsoon and the panel wait for it, so like an invalid BACKSOON_REFRESH a
-  # refusal (a foreign server_proxy.conf, an invalid BACKSOON_NPM_INTERCEPT_503) stops the deploy
+  # refusal (a foreign server_proxy.conf, an invalid BACKSOON_NPM_INTERCEPT_503 or BACKSOON_NPM_RESTORE) stops the deploy
   # with its reason in `docker logs backsoon-npm-snippet`, and `up --wait` accepts its exit.
   # NPM applies the file at its next reload (saving any proxy host, or restarting NPM).
+  # BACKSOON_NPM_RESTORE=true removes backsoon's file instead (NPM's default configuration).
   backsoon-npm-snippet:
     build: *backsoon-build
     image: backsoon:local
@@ -71,6 +72,7 @@ services:
     environment:
       BACKSOON_NPM_CUSTOM_DIR: ${BACKSOON_NPM_CUSTOM_DIR:-}
       BACKSOON_NPM_INTERCEPT_503: ${BACKSOON_NPM_INTERCEPT_503:-true}
+      BACKSOON_NPM_RESTORE: ${BACKSOON_NPM_RESTORE:-false}
     volumes:
       - ${BACKSOON_NPM_CUSTOM_DIR:-backsoon_npm_custom}:/npm-custom
     network_mode: none

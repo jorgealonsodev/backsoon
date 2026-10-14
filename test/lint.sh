@@ -79,7 +79,7 @@ if command -v python3 >/dev/null 2>&1; then
   if [ "$got" = 'jc21/nginx-proxy-manager:2.15.1 jc21/nginx-proxy-manager:2.15.1' ]; then pass "BACKSOON_TEST_NPM_IMAGE selects the test NPM"; else fail "BACKSOON_TEST_NPM_IMAGE selects the test NPM" "got [$got]"; fi
   # compose_json: docker-compose.yml resolved with only the given BACKSOON_ variables set.
   compose_json() {
-    env -u BACKSOON_ADMIN_HOST_BIND -u BACKSOON_ADMIN_HOST_PORT -u BACKSOON_NPM_CUSTOM_DIR -u BACKSOON_NPM_INTERCEPT_503 \
+    env -u BACKSOON_ADMIN_HOST_BIND -u BACKSOON_ADMIN_HOST_PORT -u BACKSOON_NPM_CUSTOM_DIR -u BACKSOON_NPM_INTERCEPT_503 -u BACKSOON_NPM_RESTORE \
       "$@" docker compose -f docker-compose.yml config --format json 2>/dev/null
   }
   admin_ports() {
@@ -96,6 +96,13 @@ if command -v python3 >/dev/null 2>&1; then
   if [ "$got" = 'volume:backsoon_npm_custom:/npm-custom' ]; then pass "without BACKSOON_NPM_CUSTOM_DIR the snippet service gets a private volume"; else fail "without BACKSOON_NPM_CUSTOM_DIR the snippet service gets a private volume" "got [$got]"; fi
   got=$(snippet_mount BACKSOON_NPM_CUSTOM_DIR=/docker/nginx-proxy-manager/data/nginx/custom)
   if [ "$got" = 'bind:/docker/nginx-proxy-manager/data/nginx/custom:/npm-custom' ]; then pass "BACKSOON_NPM_CUSTOM_DIR binds NPM's custom directory"; else fail "BACKSOON_NPM_CUSTOM_DIR binds NPM's custom directory" "got [$got]"; fi
+  snippet_restore() {
+    compose_json "$@" | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["services"]["backsoon-npm-snippet"]["environment"].get("BACKSOON_NPM_RESTORE"))' 2>/dev/null
+  }
+  got=$(snippet_restore)
+  if [ "$got" = false ]; then pass "BACKSOON_NPM_RESTORE defaults to false in the snippet service"; else fail "BACKSOON_NPM_RESTORE defaults to false in the snippet service" "got [$got]"; fi
+  got=$(snippet_restore BACKSOON_NPM_RESTORE=true)
+  if [ "$got" = true ]; then pass "BACKSOON_NPM_RESTORE reaches the snippet service"; else fail "BACKSOON_NPM_RESTORE reaches the snippet service" "got [$got]"; fi
   got=$(compose_json | python3 -I -c 'import json, sys; s = json.load(sys.stdin)["services"]; n = s["backsoon-npm-snippet"]; deps = [k for k, v in s.items() if "backsoon-npm-snippet" in (v.get("depends_on") or {})]; print(n.get("network_mode"), n.get("restart"), n.get("read_only"), ",".join(n.get("cap_drop", [])), ",".join(sorted(k for k in deps if s[k]["depends_on"]["backsoon-npm-snippet"]["condition"] == "service_completed_successfully")) or "-")' 2>/dev/null)
   if [ "$got" = 'none no True ALL backsoon,backsoon-admin' ]; then pass "the snippet service is one-shot, offline, read-only, without capabilities, and backsoon and the panel wait for it"; else fail "the snippet service is one-shot, offline, read-only, without capabilities, and backsoon and the panel wait for it" "got [$got]"; fi
   got=$(compose_json | python3 -I -c 'import json, sys; s = json.load(sys.stdin)["services"]; print(",".join(sorted(k for k, v in s.items() if v.get("build") and v.get("pull_policy") != "build")) or "-")' 2>/dev/null)

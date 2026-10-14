@@ -74,6 +74,7 @@ El ejemplo enumera todas las variables que lee el stack. Sus secretos están en 
 | `BACKSOON_ADMIN_HOST_PORT` | `8181` | Puerto del host publicado para el panel (puerto del contenedor 8080). |
 | `BACKSOON_NPM_CUSTOM_DIR` | ninguno | Ruta en el host del directorio `/data/nginx/custom` de NPM, por ejemplo `/docker/nginx-proxy-manager/data/nginx/custom`. Si se define, el servicio de una sola ejecución `backsoon-npm-snippet` instala `server_proxy.conf` allí en cada despliegue (los archivos sin cambios se dejan como están; un `server_proxy.conf` que no sea de backsoon nunca se sobrescribe). NPM lo aplica en su siguiente recarga: guarda cualquier proxy host o reinicia NPM. |
 | `BACKSOON_NPM_INTERCEPT_503` | `true` | `false` instala la variante que deja en paz las respuestas `503` de las aplicaciones (intercepta solo `502` y `504`). |
+| `BACKSOON_NPM_RESTORE` | `false` | `true` restaura la configuración predeterminada de NPM: el siguiente despliegue elimina el `server_proxy.conf` de backsoon de `BACKSOON_NPM_CUSTOM_DIR` en lugar de instalarlo (nunca un archivo que no sea de backsoon); recarga NPM y después elimina el stack. Consulta [Reversión](docs/install.es.md#reversión). |
 | `BACKSOON_PROXY_NETWORK` | `proxy` | Nombre de la red externa de Docker existente que se comparte con NPM, por ejemplo una red de NPM como `npm-nw`. |
 | `BACKSOON_TRUSTED_PROXIES` | ninguno | Direcciones IP o rangos CIDR, separados por comas o espacios, autorizados a establecer la cabecera `X-Real-IP` que sirve de clave para el límite de intentos de inicio de sesión; defínela con el rango de la red `proxy`, por ejemplo `172.18.0.0/16`. Un peer fuera de la lista queda limitado por su propia dirección. Sin definir, el panel cree en `X-Real-IP` de cualquier peer. Una entrada no válida detiene el panel al arrancar. |
 
@@ -191,7 +192,7 @@ docker exec <npm> mv /data/nginx/custom/server_proxy.conf /data/nginx/custom/ser
 docker exec <npm> nginx -t && docker exec <npm> nginx -s reload
 ```
 
-No se modifica ningún proxy host ni página almacenada. Copia de nuevo el archivo del repositorio y recarga para activarlo otra vez.
+No se modifica ningún proxy host ni página almacenada. Copia de nuevo el archivo del repositorio y recarga para activarlo otra vez. Con la instalación automática, usa en su lugar `BACKSOON_NPM_RESTORE=true` (consulta [Reversión](docs/install.es.md#reversión)); de lo contrario, el siguiente despliegue instala el archivo otra vez.
 
 ## Verificación y alcance restante
 
