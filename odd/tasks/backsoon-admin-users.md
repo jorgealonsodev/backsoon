@@ -17,7 +17,7 @@ Branch: feat/admin-users from feat/admin-favicon (2eb02f4, favicon, not pushed y
 
 ## Tasks
 
-- T1 | S1–S2, S5 (core) | delegated worker: user store, session identity and revocation, sign-in over owner + users (admin/internal/**) | pending | commit: —
+- T1 | S1–S2, S5 (core) | delegated worker mv8fom9n-8-raoy | done (go test -race 8/8, lint 0) | commit: 375dc91
 - T2 | S3–S4, S6–S10 | delegated worker after T1: user management and own-password views, authorization, logs, i18n, e2e, docs | pending | commit: —
 - T3 | S1–S9 | independent verify (security: authentication, authorization, stored credentials) | pending | commit: —
 
@@ -26,3 +26,4 @@ Branch: feat/admin-users from feat/admin-favicon (2eb02f4, favicon, not pushed y
 L1 — User (2026-10-14), with a screenshot of the Spanish directory: "quiero que se puedan añadir mas usuarios que puedan acceder desde aqui"
 L2 — User answers: permisos "Dos roles (recomendada)"; contraseña "La pones tú al crearlo (recomendada)".
 L3 — Exploration: single user today: auth.Credentials{user, hash} (auth/credentials.go:13-25); stateless sessions without user identity "<id>.<exp>.<sig>" with in-memory revocation (auth/session.go:28-165); navbar Who and login log use the configured name s.user (web/server.go:193, web/auth.go:138); sites.json written with publish/atomic at 0644 (pages/store.go:349-369).
+L4 — T1 delivered by mv8fom9n-8-raoy: users package (users.json 0600, bcrypt 12, dummy hash for unknown users), 5-part session cookie id.exp.b64user.stamp.sig checked against a Directory, owner stamp from Config.PasswordFingerprint (HMAC; plaintext BACKSOON_ADMIN_PASSWORD is re-salted on every start, so a hash-derived stamp would log the owner out on each restart). RED compile-level + TestRunRefusesToStartWithACorruptUserFile; parent re-ran go test -race 8/8 and lint 0; committed 375dc91. Worker ran git stash/pop once while parent changes were in the tree; parent checked: stash empty, 8b96e94 intact, tree held only T1 files. Notes for T2/T3: owner-name sign-in costs the owner hash's bcrypt cost vs 12 for others (may reveal the owner's name, not stored users); an owner renamed onto a stored user shadows it.
