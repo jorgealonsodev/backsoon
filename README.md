@@ -66,7 +66,7 @@ The example lists every variable the stack reads. Its secrets are deliberately b
 | `BACKSOON_ADMIN_USER` | none | Panel administrator user. Required by the panel. |
 | `BACKSOON_ADMIN_PASSWORD_HASH` | none | bcrypt hash of the administrator password. Preferred; wins if both password variables are set. |
 | `BACKSOON_ADMIN_PASSWORD` | none | Plaintext alternative (at most 72 bytes). Accepted, with a warning in the panel log. |
-| `BACKSOON_SESSION_SECRET` | none | Random secret of at least 32 bytes that signs the 12-hour session cookies. Required by the panel. |
+| `BACKSOON_SESSION_SECRET` | none | Random secret of at least 32 bytes that signs the 12-hour session cookies. Required by the panel. Signing out revokes the session at once, but the panel keeps that list in memory: after a panel restart, a copy of a signed-out cookie works again until its 12 hours end. Change this secret to end every session. |
 
 Without a user, a password or hash, and a secret the panel exits at start with a message naming the missing variable; it never runs without login. `backsoon` does not depend on the panel and keeps serving pages if the panel is stopped or misconfigured.
 

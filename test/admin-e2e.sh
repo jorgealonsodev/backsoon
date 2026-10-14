@@ -689,5 +689,16 @@ case $client_ip in
   *) ok "log: the client address is the one NPM forwarded ($client_ip)" ;;
 esac
 
+section 'Logout revokes the session: a copy of the old cookie no longer opens the panel'
+panel /logout -X POST --data-urlencode "csrf=$CSRF"
+expect_eq 'logout -> 303' 303 "$STATUS"
+expect_eq 'logout redirects to /login' /login "$(header_value Location)"
+expect_has 'logout clears the session cookie' "$(set_cookie_line backsoon_session)" 'Max-Age=0'
+panel / -H 'Accept: text/html' -H 'Sec-Fetch-Mode: navigate'
+expect_eq 'the old cookie after logout -> 303' 303 "$STATUS"
+expect_eq 'the old cookie after logout is sent to /login' /login "$(header_value Location)"
+panel / -H 'Accept: */*'
+expect_eq 'the old cookie after logout, bare client -> 401' 401 "$STATUS"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]

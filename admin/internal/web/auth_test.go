@@ -261,6 +261,17 @@ func TestLogout(t *testing.T) {
 	if !cleared {
 		t.Fatal("logout did not clear the session cookie")
 	}
+
+	// A copy of the old cookie no longer opens the panel.
+	for _, w := range []*httptest.ResponseRecorder{hn.get("/", s), hn.postForm("/pages/abc/delete", s, url.Values{})} {
+		wantStatus(t, w, http.StatusSeeOther)
+		if w.Header().Get("Location") != "/login" {
+			t.Fatalf("old cookie after logout: Location = %q", w.Header().Get("Location"))
+		}
+	}
+
+	// Signing in again gives a working session.
+	wantStatus(t, hn.get("/", hn.login()), http.StatusOK)
 }
 
 var cspNonceRe = regexp.MustCompile(`style-src 'nonce-([^']+)'`)

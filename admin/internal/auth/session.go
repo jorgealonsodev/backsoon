@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,11 +33,18 @@ type Session struct {
 }
 
 // Manager issues and verifies sessions signed with HMAC-SHA256. Sessions are stateless: the
-// cookie value is "<id>.<expiry unix seconds>.<base64url signature>". The same secret derives
-// CSRF tokens under a separate domain prefix.
+// cookie value is "<id>.<expiry unix seconds>.<base64url signature>", so they survive a panel
+// restart. The same secret derives CSRF tokens under a separate domain prefix.
+//
+// Logout revokes a session by remembering its id in memory until the session would have expired.
+// The list is not persisted: a restart forgets it, and only a new BACKSOON_SESSION_SECRET
+// invalidates every session issued before.
 type Manager struct {
 	secret []byte
 	now    func() time.Time
+
+	mu      sync.Mutex
+	revoked map[string]time.Time // session id -> expiry
 }
 
 // NewManager returns a Manager using secret as the signing key. A nil clock means time.Now.
@@ -44,7 +52,37 @@ func NewManager(secret []byte, now func() time.Time) *Manager {
 	if now == nil {
 		now = time.Now
 	}
-	return &Manager{secret: append([]byte(nil), secret...), now: now}
+	return &Manager{secret: append([]byte(nil), secret...), now: now, revoked: make(map[string]time.Time)}
+}
+
+// Revoke makes Verify reject s from now on. Each call drops the revocations of sessions that have
+// expired since, so the list holds at most the sessions closed within SessionLifetime before the
+// latest logout.
+func (m *Manager) Revoke(s Session) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	for id, exp := range m.revoked {
+		if !now.Before(exp) {
+			delete(m.revoked, id)
+		}
+	}
+	if now.Before(s.Expires) {
+		m.revoked[s.ID] = s.Expires
+	}
+}
+
+func (m *Manager) isRevoked(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.revoked[id]
+	return ok
+}
+
+func (m *Manager) revokedCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.revoked)
 }
 
 // Issue creates a new session and the cookie that carries it.
@@ -85,7 +123,7 @@ func (m *Manager) ExpiredCookie() *http.Cookie {
 	}
 }
 
-// Verify parses a cookie value and checks its signature and expiry.
+// Verify parses a cookie value and checks its signature, expiry and revocation.
 func (m *Manager) Verify(value string) (Session, error) {
 	parts := strings.Split(value, ".")
 	if len(parts) != 3 || len(parts[0]) != 32 {
@@ -100,7 +138,7 @@ func (m *Manager) Verify(value string) (Session, error) {
 		return Session{}, ErrInvalidSession
 	}
 	s := Session{ID: parts[0], Expires: time.Unix(exp, 0)}
-	if !m.now().Before(s.Expires) {
+	if !m.now().Before(s.Expires) || m.isRevoked(s.ID) {
 		return Session{}, ErrInvalidSession
 	}
 	return s, nil

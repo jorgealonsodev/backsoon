@@ -145,6 +145,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		s.csrfFailed(w, sess)
 		return
 	}
+	s.sessions.Revoke(sess)
 	http.SetCookie(w, s.sessions.ExpiredCookie())
 	s.log.Printf("logout ip=%s", clientIP(r))
 	setSecurityHeaders(w.Header())

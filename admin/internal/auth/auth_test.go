@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -141,6 +142,41 @@ func TestSessionsAreUnique(t *testing.T) {
 	b, _, _ := m.Issue()
 	if a.ID == b.ID {
 		t.Fatal("session ids must be random")
+	}
+}
+
+func TestRevokedSessionIsRejectedUntilItWouldExpire(t *testing.T) {
+	clk := newClock()
+	m := NewManager(testSecret, clk.Now)
+	a, cookieA, _ := m.Issue()
+	_, cookieB, _ := m.Issue()
+
+	m.Revoke(a)
+	if _, err := m.Verify(cookieA.Value); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("revoked session verified: %v", err)
+	}
+	r := mustReq(t)
+	r.AddCookie(cookieA)
+	if _, err := m.FromRequest(r); err == nil {
+		t.Fatal("FromRequest accepted a revoked session")
+	}
+	if _, err := m.Verify(cookieB.Value); err != nil {
+		t.Fatalf("revoking one session must not affect another: %v", err)
+	}
+	if m.revokedCount() != 1 {
+		t.Fatalf("revoked entries = %d, want 1", m.revokedCount())
+	}
+
+	// The entry is only needed while the signature would still be accepted.
+	clk.Advance(SessionLifetime)
+	m.Revoke(Session{ID: strings.Repeat("0", 32), Expires: clk.Now().Add(time.Hour)})
+	if m.revokedCount() != 1 {
+		t.Fatalf("expired revocations must be pruned: %d entries, want 1", m.revokedCount())
+	}
+	// Revoking an already expired session stores nothing.
+	m.Revoke(a)
+	if m.revokedCount() != 1 {
+		t.Fatalf("revoking an expired session stored it: %d entries", m.revokedCount())
 	}
 }
 
