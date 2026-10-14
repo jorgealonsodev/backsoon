@@ -97,6 +97,7 @@ func TestValidateHTMLWarnings(t *testing.T) {
 		"handler text outside tag": `<p>&lt;img onerror=alert(1)&gt; is shown as text</p>`,
 		"numeric meta refresh":     `<meta http-equiv="refresh" content="10">`,
 		"inline svg":               `<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0h10v10z"/></svg>`,
+		"javascript word in text":  `<h1>Curso de JavaScript: nivel 1</h1><p>(javascript : off)</p>`,
 	} {
 		t.Run("not script-capable "+name, func(t *testing.T) {
 			if ws, err := Inspect([]byte(html)); err != nil || len(ws) != 0 {
@@ -129,6 +130,19 @@ func readTemplate(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// Ordinary words in the template's values never look like script-capable markup (S3).
+func TestRenderTemplateLookAlikesStayClean(t *testing.T) {
+	out, err := RenderTemplate(readTemplate(t), TemplateParams{
+		AppName: "Curso de JavaScript: nivel 1", Message: "Back online = soon (javascript: off) <iframe>", Lang: "es", Icon: "🔧", Refresh: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws, _ := Inspect(out); len(ws) != 0 {
+		t.Errorf("template page with look-alike values must have no warnings: %v", ws)
+	}
 }
 
 func TestRenderTemplate(t *testing.T) {

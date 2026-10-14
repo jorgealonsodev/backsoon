@@ -43,9 +43,10 @@ var (
 	// Script-capable markup. Advisory only: the CSP on every maintenance response is what keeps
 	// it from running, so these favour catching variants over precision.
 	handlerRe = regexp.MustCompile(`(?i)<[a-z][^>]*[\s/"']on[a-z]+\s*=`)
-	// javascript followed by a colon, raw or as an entity (&#58; &#x3a; &colon;), anywhere: URLs
-	// in attributes, meta refresh and CSS url().
-	jsURLRe       = regexp.MustCompile(`(?i)javascript\s*(?::|&#0*58;?|&#x0*3a;?|&colon;)`)
+	// A javascript: URL, its colon raw or as an entity (&#58; &#x3a; &colon;), where a URL starts:
+	// after = (attributes, meta refresh's url=) or CSS url(. Plain text such as "JavaScript: 101"
+	// is not one.
+	jsURLRe       = regexp.MustCompile(`(?i)(?:=|url\()\s*["']?\s*javascript\s*(?::|&#0*58;?|&#x0*3a;?|&colon;)`)
 	embedRe       = regexp.MustCompile(`(?i)<(?:iframe|frame|object|embed|applet|base)\b`)
 	scriptCapable = []struct {
 		re   *regexp.Regexp
