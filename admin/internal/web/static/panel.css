@@ -117,7 +117,11 @@ main.container { padding-block: 1.5rem 3rem; }
 .navbar { background: var(--surface); border-bottom: 1px solid var(--border); }
 .navbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3.5rem; }
 .brand { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--text); font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
-.navbar-end { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.navbar-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.25rem 0.75rem; min-width: 0; }
+.navlinks { display: inline-flex; align-items: center; gap: 0.125rem; font-size: 0.875rem; font-weight: 500; }
+.navlinks a { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.55rem; border-radius: var(--radius); color: var(--muted); text-decoration: none; }
+.navlinks a:hover { color: var(--text); background: var(--surface-2); }
+.navlinks a[aria-current="page"] { color: var(--accent-text); background: var(--accent-tint); }
 .who { min-width: 0; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.875rem; }
 .inline-form { display: inline; }
 .lang { display: inline-flex; align-items: center; gap: 0.125rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.04em; }
@@ -250,6 +254,8 @@ fieldset legend { padding: 0; margin-bottom: 0.35rem; }
 .c-name { width: 26%; }
 .c-preview { width: 8rem; }
 .c-actions { width: 3.5rem; text-align: right; }
+.c-date { color: var(--muted); font-size: 0.875rem; white-space: nowrap; }
+.sub-label { display: none; }
 .name { color: var(--text); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .name:hover { text-decoration: underline; }
 .table .sub { margin-top: 0.1rem; }
@@ -346,6 +352,8 @@ tr.is-hit td:first-child { box-shadow: inset 1px 0 0 var(--accent); }
   tr.is-hit { box-shadow: inset 1px 0 0 var(--accent); }
   .c-name { padding-right: 2.75rem; }
   .c-dests { margin-top: 0.65rem; }
+  .c-date { margin-top: 0.25rem; white-space: normal; }
+  .sub-label { display: inline; }
   .c-preview { margin-top: 0.75rem; }
   .c-actions { position: absolute; top: 0.5rem; right: 0.5rem; width: auto; }
   .preview-row td { padding: 0 1rem 1rem; }

@@ -131,6 +131,10 @@ func returnPath(r *http.Request) string {
 		return "/login"
 	case p == "/pages":
 		return "/pages/new"
+	case p == "/users" || strings.HasPrefix(p, "/users/"):
+		return "/users"
+	case strings.HasPrefix(p, "/account"):
+		return "/account"
 	case strings.HasSuffix(p, "/delete"):
 		return safeNext(strings.TrimSuffix(p, "/delete"))
 	case strings.HasPrefix(p, "/pages/"):

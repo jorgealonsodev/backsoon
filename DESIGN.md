@@ -29,7 +29,7 @@ The visitor-facing maintenance page (`templates/maintenance.html`) is a separate
 
 ## Components
 
-- **Header:** mark and wordmark left; the ES / EN switch, the signed-in user and Sign out (POST with CSRF) right.
+- **Header:** mark and wordmark left; right, the navigation links (**Users**, owner only, and **My password**), the ES / EN switch, the signed-in user and Sign out (POST with CSRF). The links are plain muted text that gets the surface tint on hover; the current one carries `aria-current="page"` and the orange tint. The group wraps instead of scrolling on narrow screens.
 - **Card:** white surface with a 2–3px orange top status line, header (title + tools), body, and a grey footer for actions or hints. Never nested.
 - **Pages table:** small uppercase column heads (NAME, DESTINATIONS, PREVIEW). Each row shows the page name with "Updated …" beneath, destination chips, a Preview button and a `details`/`summary` actions menu (Edit, Preview full size, Delete). The default page is always last, with an "Everything else" chip and no delete.
 - **Destination chip:** light mono chip with a globe icon (domain) or a server icon (service:port); the type is also visually-hidden text.
@@ -37,6 +37,8 @@ The visitor-facing maintenance page (`templates/maintenance.html`) is a separate
 - **Alerts and pills:** tinted background with matching text; amber "No destinations" pill for pages that own none.
 - **Forms:** labels above inputs, help text below, blue focus ring; "Start from" as two radio cards; primary and secondary buttons in the card footer; a separate red-outlined "Danger zone" card for delete.
 - **Confirm pages:** one card per decision (content warnings, destination move, delete) with the facts and two actions; no modals.
+- **Users table:** the pages-table grammar without chips: user name, created and password-changed dates (UTC, with their labels shown inline in the stacked layout), and a `details`/`summary` actions menu (Set password, Delete user). An info alert above it names the owner. An "Add a user" card follows the table.
+- **Password forms:** the standard form card. Password inputs use `autocomplete` `current-password` / `new-password`, a repeat field and a hint with the length rules; errors sit under the field and in the summary alert. Setting a user's password is itself the confirmation card (a warning alert says their sessions end, with the fields and two actions); deleting a user is the usual delete confirm card. Passwords are never echoed back.
 - **Language switch:** two plain links, ES and EN, the current one marked with `aria-current`; in the header when signed in and under the card on the login page. It is a `GET /lang` link (no JavaScript) that sets the `backsoon_lang` cookie and returns to the same page.
 - **Preview:** sandboxed `iframe` (no tokens) inside the expanded row or the edit page; links inside it show a framed notice instead of breaking.
 

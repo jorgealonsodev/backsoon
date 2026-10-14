@@ -149,7 +149,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 	}
 	s.sessions.Revoke(sess)
 	http.SetCookie(w, s.sessions.ExpiredCookie())
-	s.log.Printf("logout ip=%s", clientIP(r, s.trusted))
+	s.log.Printf("logout user=%q ip=%s", sess.User, clientIP(r, s.trusted))
 	setSecurityHeaders(w.Header())
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

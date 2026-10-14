@@ -39,7 +39,7 @@ die() { printf 'admin-e2e: %s\n' "$*" >&2; exit 2; }
 finish() {
   result=$?
   trap - EXIT
-  for n in 1 2 3 4; do docker rm -f "$NOCREDS_PREFIX-$n" >/dev/null 2>&1; done
+  for n in 1 2 3 4 5 meta; do docker rm -f "$NOCREDS_PREFIX-$n" >/dev/null 2>&1; done
   if [ "$OWNED" = 1 ]; then sh "$ROOT/test/harness.sh" down || result=1; fi
   for pair in "$OWN_SERVICE_IMAGE:$SERVICE_IMAGE" "$OWN_ADMIN_IMAGE:$ADMIN_IMAGE"; do
     if [ "${pair%%:*}" = 1 ] && docker image inspect "${pair#*:}" >/dev/null 2>&1; then
@@ -698,6 +698,241 @@ expect_eq 'cleanup: Keep deleted' 303 "$STATUS"
 dc start app1 || die 'cannot restore app1'
 wait_for 'app1 back through NPM' 30 app_probe app1.test 200 'Name: app1'
 expect_eq 'app1 recovers' 200 "$STATUS"
+
+section 'S9: the owner adds users; an editor signs in and manages pages, never users'
+ED_NAME=ed-e2e
+ED_PASSWORD=editor-test-only-pw-1
+ED_NEW_PASSWORD=editor-test-only-pw-2
+GONE_NAME=gone-e2e
+GONE_PASSWORD=gone-test-only-pw-1
+OWNER_COOKIE=$COOKIE
+OWNER_CSRF=$CSRF
+# as COOKIE CSRF COMMAND...: run a helper with another session in the helpers' globals.
+as() { COOKIE=$1; CSRF=$2; shift 2; "$@"; COOKIE=$OWNER_COOKIE; CSRF=$OWNER_CSRF; }
+# user_login NAME PASSWORD: sign in through the login form; sets USER_COOKIE (empty when refused).
+user_login() {
+  try_login "$1" "$2"
+  USER_COOKIE=''
+  [ "$STATUS" = 303 ] || return 0
+  USER_COOKIE="backsoon_session=$(set_cookie_value backsoon_session)"
+}
+# with_cookie COOKIE PATH [curl args]: a panel request with that session.
+with_cookie() { _c=$1; _p=$2; shift 2; req "$HTTP_PORT" "$_p" -H 'Host: admin.test' -H "Cookie: $_c" "$@"; }
+# csrf_of COOKIE: the CSRF token the panel gives that session.
+csrf_of() { with_cookie "$1" /pages/new -H 'Accept: text/html'; field_value csrf; }
+# user_listed NAME: the owner's user list shows NAME as a row with a delete form.
+user_listed() { panel /users -H 'Accept: text/html'; printf '%s\n' "$BODY" | grep -q "name=\"user\" value=\"$1\""; }
+# users_file_facts: mode, owner and plaintext matches of users.json in the meta volume.
+users_file_facts() {
+  docker run --rm --name "$NOCREDS_PREFIX-meta" --label com.backsoon.test=true --network none \
+    -e "PW1=$ED_PASSWORD" -e "PW2=$ED_NEW_PASSWORD" -e "PW3=$GONE_PASSWORD" \
+    -v "${BACKSOON_TEST_PROJECT}_meta:/meta:ro" --entrypoint sh "$SERVICE_IMAGE" -c '
+      stat -c "mode=%a owner=%u:%g" /meta/users.json
+      for v in "$PW1" "$PW2" "$PW3"; do printf "plain=%s\n" "$(grep -cF -- "$v" /meta/users.json)"; done
+      printf "bcrypt=%s\n" "$(grep -cF -- "\$2a\$12\$" /meta/users.json)"' 2>&1
+}
+
+panel /users -H 'Accept: text/html'
+expect_eq 'owner: GET /users -> 200' 200 "$STATUS"
+expect_has 'owner: the navbar links to the users' "$BODY" 'href="/users"'
+expect_has 'owner: the add form has its fields' "$BODY" 'name="confirm_password"'
+panel /account -H 'Accept: text/html'
+expect_eq 'owner: GET /account -> 200' 200 "$STATUS"
+expect_eq 'owner: no change-password form (it is set in the stack variables)' 0 "$(printf '%s' "$BODY" | grep -c 'name="current"')"
+panel /account/password -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "current=$PASSWORD" \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'owner: POST /account/password -> 403' 403 "$STATUS"
+
+# Creation: validation first, nothing is stored on a refusal.
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "name=$ED_NAME" \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=different-password"
+expect_eq 'create with passwords that differ -> 422' 422 "$STATUS"
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "name=$ED_NAME" \
+  --data-urlencode password=short --data-urlencode confirm_password=short
+expect_eq 'create with a short password -> 422' 422 "$STATUS"
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode 'name=bad name!' \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq 'create with an invalid name -> 422' 422 "$STATUS"
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode name=ADMIN \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq "create with the owner's name -> 422" 422 "$STATUS"
+panel /users -X POST --data-urlencode "name=$ED_NAME" --data-urlencode "password=$ED_PASSWORD" \
+  --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq 'create without the CSRF token -> 403' 403 "$STATUS"
+if user_listed "$ED_NAME"; then ko 'refused creations stored nothing' "$ED_NAME is listed"; else ok 'refused creations stored nothing'; fi
+
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "name=$ED_NAME" \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq 'owner creates the editor -> 303' 303 "$STATUS"
+expect_eq 'creation returns to the user list' '/users?notice=user-created' "$(header_value Location)"
+if user_listed "$ED_NAME"; then ok 'the editor is listed'; else ko 'the editor is listed' "$ED_NAME missing"; fi
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "name=$ED_NAME" \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq 'creating the same name again -> 409' 409 "$STATUS"
+panel /users -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "name=$GONE_NAME" \
+  --data-urlencode "password=$GONE_PASSWORD" --data-urlencode "confirm_password=$GONE_PASSWORD"
+expect_eq 'owner creates a second user -> 303' 303 "$STATUS"
+
+section 'S9: users.json lives in the meta volume with mode 0600 and holds no plaintext'
+facts=$(users_file_facts)
+printf '%s\n' "$facts" > "$ARTIFACTS/users-file.txt"
+expect_has 'users.json mode is 0600' "$facts" 'mode=600'
+expect_has 'users.json belongs to the panel uid' "$facts" 'owner=65532:65532'
+expect_eq 'users.json holds no plaintext password' 0 "$(printf '%s\n' "$facts" | grep '^plain=' | grep -vc '^plain=0$')"
+expect_has 'users.json holds bcrypt cost-12 hashes' "$facts" 'bcrypt=2'
+
+section 'S9: the editor signs in and manages a page'
+user_login "$ED_NAME" "$ED_PASSWORD"
+ED_COOKIE=$USER_COOKIE
+[ "$ED_COOKIE" != "backsoon_session=" ] && [ -n "$ED_COOKIE" ] || die 'the editor could not sign in'
+ok 'the editor signs in'
+user_login "$ED_NAME" "$ED_PASSWORD"
+ED_SECOND=$USER_COOKIE
+user_login "$ED_NAME" "$(printf '%s' "$ED_PASSWORD" | tr 'a-z' 'A-Z')"
+expect_eq 'the password is case-sensitive' 401 "$STATUS"
+user_login "$ED_NAME" "$ED_PASSWORD"
+[ -n "$USER_COOKIE" ] || die 'the editor could not sign in again'
+ED_CSRF=$(csrf_of "$ED_COOKIE")
+[ -n "$ED_CSRF" ] || die 'the editor has no csrf token'
+with_cookie "$ED_COOKIE" / -H 'Accept: text/html'
+expect_eq 'the editor sees the directory' 200 "$STATUS"
+expect_has 'the editor sees their own name' "$BODY" "$ED_NAME"
+expect_eq 'the editor has no link to the users' 0 "$(printf '%s' "$BODY" | grep -c 'href="/users"')"
+as "$ED_COOKIE" "$ED_CSRF" create_template 'Ed-e2e' 'ed.test' 'Ed App'
+expect_created 'the editor creates a page'
+ED_PAGE=$PAGE_ID
+served ed.test
+expect_has 'the editor-made page is what backsoon serves' "$BODY" 'Ed App'
+with_cookie "$ED_COOKIE" "/pages/$ED_PAGE" -H 'Accept: text/html'
+expect_eq 'the editor opens the page edit form' 200 "$STATUS"
+with_cookie "$ED_COOKIE" /account -H 'Accept: text/html'
+expect_eq 'the editor opens the password form' 200 "$STATUS"
+expect_has 'the password form asks for the current password' "$BODY" 'name="current"'
+
+section 'S6: an editor gets 403 on every user route and nothing changes'
+for route in '/users' "/users/password?user=$GONE_NAME"; do
+  with_cookie "$ED_COOKIE" "$route" -H 'Accept: text/html'
+  expect_eq "editor GET $route -> 403" 403 "$STATUS"
+  expect_lacks "editor GET $route lists no user" "$BODY" "value=\"$GONE_NAME\""
+done
+with_cookie "$ED_COOKIE" /users -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode name=intruder-e2e \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq 'editor POST /users -> 403' 403 "$STATUS"
+with_cookie "$ED_COOKIE" /users/password -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode "user=$GONE_NAME" \
+  --data-urlencode confirm=true --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'editor POST /users/password -> 403' 403 "$STATUS"
+with_cookie "$ED_COOKIE" /users/delete -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode "user=$GONE_NAME" --data-urlencode confirm=true
+expect_eq 'editor POST /users/delete -> 403' 403 "$STATUS"
+with_cookie "$ED_COOKIE" /users/delete -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode "user=$ED_NAME" --data-urlencode confirm=true
+expect_eq 'editor cannot delete themselves -> 403' 403 "$STATUS"
+if user_listed intruder-e2e; then ko 'the editor created no user' 'intruder-e2e is listed'; else ok 'the editor created no user'; fi
+if user_listed "$GONE_NAME"; then ok 'the second user is untouched'; else ko 'the second user is untouched' "$GONE_NAME missing"; fi
+user_login "$GONE_NAME" "$GONE_PASSWORD"
+[ -n "$USER_COOKIE" ] || die 'the second user could not sign in with their original password'
+GONE_COOKIE=$USER_COOKIE
+ok 'the second user still signs in with their original password'
+with_cookie "$ED_COOKIE" / -H 'Accept: text/html'
+expect_eq 'the editor stays signed in after the refused requests' 200 "$STATUS"
+
+section 'S6: CSRF on the user routes, and confirmations before anything changes'
+panel /users/delete -X POST --data-urlencode "user=$GONE_NAME" --data-urlencode confirm=true
+expect_eq 'delete without a CSRF token -> 403' 403 "$STATUS"
+panel /users/password -X POST --data-urlencode "user=$GONE_NAME" --data-urlencode confirm=true \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'set password without a CSRF token -> 403' 403 "$STATUS"
+with_cookie "$ED_COOKIE" /account/password -X POST --data-urlencode "current=$ED_PASSWORD" \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'own password without a CSRF token -> 403' 403 "$STATUS"
+panel /users/delete -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "user=$GONE_NAME"
+expect_eq 'delete without the confirmation shows the confirmation -> 200' 200 "$STATUS"
+expect_has 'the confirmation carries confirm=true for the real delete' "$BODY" 'name="confirm" value="true"'
+panel "/users/password?user=$GONE_NAME" -H 'Accept: text/html'
+expect_eq 'the set-password confirmation -> 200' 200 "$STATUS"
+panel /users/password -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "user=$GONE_NAME" \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'set password without confirm=true changes nothing -> 200' 200 "$STATUS"
+with_cookie "$GONE_COOKIE" / -H 'Accept: text/html'
+expect_eq 'none of the refused requests touched the second user' 200 "$STATUS"
+panel /users/password -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "user=$GONE_NAME" --data-urlencode confirm=true \
+  --data-urlencode password=short --data-urlencode confirm_password=short
+expect_eq 'set a short password -> 422' 422 "$STATUS"
+
+section 'S4: the editor changes their own password; the other sessions end, this one stays'
+with_cookie "$ED_COOKIE" /account/password -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode current=not-the-password \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'a wrong current password -> 422' 422 "$STATUS"
+with_cookie "$ED_COOKIE" /account/password -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode "current=$ED_PASSWORD" \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD-x"
+expect_eq 'new passwords that differ -> 422' 422 "$STATUS"
+with_cookie "$ED_COOKIE" / -H 'Accept: text/html'
+expect_eq 'refused changes leave the session open' 200 "$STATUS"
+with_cookie "$ED_COOKIE" /account/password -X POST --data-urlencode "csrf=$ED_CSRF" --data-urlencode "current=$ED_PASSWORD" \
+  --data-urlencode "password=$ED_NEW_PASSWORD" --data-urlencode "confirm_password=$ED_NEW_PASSWORD"
+expect_eq 'the password change -> 303' 303 "$STATUS"
+FRESH=$(set_cookie_value backsoon_session)
+[ -n "$FRESH" ] || die 'the password change issued no new session'
+ED_FRESH="backsoon_session=$FRESH"
+expect_has 'the new session cookie is HttpOnly' "$(set_cookie_line backsoon_session)" 'HttpOnly'
+expect_has 'the new session cookie is Secure' "$(set_cookie_line backsoon_session)" 'Secure'
+with_cookie "$ED_FRESH" / -H 'Accept: text/html'
+expect_eq 'the browser that changed it stays signed in' 200 "$STATUS"
+with_cookie "$ED_COOKIE" / -H 'Accept: text/html'
+expect_eq 'the old session of that browser ended' 303 "$STATUS"
+with_cookie "$ED_SECOND" / -H 'Accept: text/html'
+expect_eq 'the other session of the user ended' 303 "$STATUS"
+expect_eq 'the other session is sent to /login' /login "$(header_value Location)"
+with_cookie "$GONE_COOKIE" / -H 'Accept: text/html'
+expect_eq 'sessions of other users are untouched' 200 "$STATUS"
+user_login "$ED_NAME" "$ED_NEW_PASSWORD"
+[ -n "$USER_COOKIE" ] || die 'the editor cannot sign in with the new password'
+ok 'the new password signs in'
+
+section 'S3 / S5: the owner sets a password and deletes; sessions end now and across a panel restart'
+panel /users/password -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "user=$ED_NAME" --data-urlencode confirm=true \
+  --data-urlencode "password=$ED_PASSWORD" --data-urlencode "confirm_password=$ED_PASSWORD"
+expect_eq 'the owner sets the editor password -> 303' 303 "$STATUS"
+with_cookie "$ED_FRESH" / -H 'Accept: text/html'
+expect_eq 'setting the password ended the editor session' 303 "$STATUS"
+user_login "$ED_NAME" "$ED_PASSWORD"
+[ -n "$USER_COOKIE" ] || die 'the editor cannot sign in with the password the owner set'
+ED_COOKIE=$USER_COOKIE
+ok 'the password the owner set signs in'
+panel /users/delete -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "user=$GONE_NAME" --data-urlencode confirm=true
+expect_eq 'the owner deletes the second user -> 303' 303 "$STATUS"
+expect_eq 'deletion returns to the user list' '/users?notice=user-deleted' "$(header_value Location)"
+with_cookie "$GONE_COOKIE" / -H 'Accept: text/html'
+expect_eq 'deleting a user ended their session' 303 "$STATUS"
+if user_listed "$GONE_NAME"; then ko 'the deleted user is gone from the list' "$GONE_NAME listed"; else ok 'the deleted user is gone from the list'; fi
+
+dc restart --timeout 5 backsoon-admin || die 'cannot restart the panel'
+reload
+wait_for 'panel healthy after the user restart' "$BACKSOON_TEST_WAIT" panel_healthy
+wait_for 'panel through NPM after the user restart' "$BACKSOON_TEST_WAIT" panel_up
+with_cookie "$ED_COOKIE" / -H 'Accept: text/html'
+expect_eq 'a restart keeps the editor session' 200 "$STATUS"
+with_cookie "$GONE_COOKIE" / -H 'Accept: text/html'
+expect_eq 'a restart keeps the revocation of the deleted user' 303 "$STATUS"
+with_cookie "$ED_FRESH" / -H 'Accept: text/html'
+expect_eq 'a restart keeps the revocation of the replaced password' 303 "$STATUS"
+if user_listed "$ED_NAME"; then ok 'a restart keeps the stored user'; else ko 'a restart keeps the stored user' "$ED_NAME missing"; fi
+user_login "$ED_NAME" "$ED_PASSWORD"
+[ -n "$USER_COOKIE" ] || die 'the editor cannot sign in after the restart'
+ok 'the editor signs in after the restart'
+facts=$(users_file_facts)
+expect_has 'users.json is still mode 0600 after the changes' "$facts" 'mode=600'
+expect_eq 'users.json still holds no plaintext after the changes' 0 "$(printf '%s\n' "$facts" | grep '^plain=' | grep -vc '^plain=0$')"
+
+panel "/pages/$ED_PAGE/delete" -X POST --data-urlencode "csrf=$CSRF" --data-urlencode confirm=true
+expect_eq "cleanup: the owner deletes the editor's page" 303 "$STATUS"
+panel /users/delete -X POST --data-urlencode "csrf=$CSRF" --data-urlencode "user=$ED_NAME" --data-urlencode confirm=true
+expect_eq 'cleanup: the owner deletes the editor' 303 "$STATUS"
+with_cookie "$ED_COOKIE" / -H 'Accept: text/html'
+expect_eq 'deleting the editor ended their session' 303 "$STATUS"
+panel / -H 'Accept: text/html'
+expect_eq 'the owner session survived all of it' 200 "$STATUS"
+# A successful sign-in clears the rate limit so that the next section starts from zero failures.
+try_login admin "$PASSWORD"
+expect_eq 'the owner still signs in' 303 "$STATUS"
 expect_eq 'recovered app1 has no maintenance header' 0 "$(header_count X-Backsoon)"
 
 section 'CA-24: the sixth failed login from one client is refused, even with the right password'
@@ -729,6 +964,18 @@ log_has 'log: page created (Shop) with its destinations' 'page created' 'Shop-e2
 log_has 'log: page created (normalized destination)' 'page created' 'Norm-e2e.*app.test'
 log_has 'log: page updated (HTML replaced)' 'page updated' 'Live-e2e'
 log_has 'log: page deleted (Live) with its destination' 'page deleted' 'Live-e2e.*app1.test'
+log_has 'log: page created names the acting editor' 'page created' "by=\"$ED_NAME\".*Ed-e2e"
+log_has 'log: page created names the owner' 'page created' 'by="admin"'
+log_has 'log: editor sign-in names the user' 'login ok' "user=\"$ED_NAME\""
+log_has 'log: user created names actor and target' 'user created' "by=\"admin\" user=\"$ED_NAME\""
+log_has 'log: user password set names actor and target' 'user password set' "by=\"admin\" user=\"$ED_NAME\""
+log_has 'log: user deleted names actor and target' 'user deleted' "by=\"admin\" user=\"$GONE_NAME\""
+log_has 'log: own password change names the user' 'password changed' "user=\"$ED_NAME\""
+log_has 'log: a failed own password change' 'password change failed' "user=\"$ED_NAME\""
+log_has 'log: an editor request to a user route' 'forbidden' "user=\"$ED_NAME\""
+for secret in "$ED_PASSWORD" "$ED_NEW_PASSWORD" "$GONE_PASSWORD" not-the-password "$ED_COOKIE" "$ED_FRESH" '$2a$' '$2y$'; do
+  expect_lacks "log: no user secret [${secret%%=*}]" "$logs" "$secret"
+done
 expect_lacks 'log: no wrong password' "$logs" 'wrong-password-xyz'
 expect_lacks 'log: no real password' "$logs" "$PASSWORD"
 expect_lacks 'log: no session secret' "$logs" "$SECRET"

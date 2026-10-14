@@ -41,6 +41,7 @@ type base struct {
 	Authed bool
 	Who    string // signed-in user name, shown in the header
 	Owner  bool   // the signed-in user is the owner
+	Nav    string // the navbar entry of the current page: users or account
 	CSRF   string
 	Notice *noticeView
 
@@ -63,7 +64,10 @@ type noticeView struct {
 }
 
 // notices are the only messages a ?notice= key can show (catalogue key "notice.<key>").
-var notices = map[string]bool{"created": false, "saved": false, "deleted": false, "publish-failed": true}
+var notices = map[string]bool{
+	"created": false, "saved": false, "deleted": false, "publish-failed": true,
+	"user-created": false, "user-deleted": false, "user-password": false, "password-changed": false,
+}
 
 type loginView struct {
 	base

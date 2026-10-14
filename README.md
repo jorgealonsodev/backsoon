@@ -66,8 +66,8 @@ The example lists every variable the stack reads. Its secrets are deliberately b
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `BACKSOON_REFRESH` | `10` | Seconds used for `Retry-After`, the JSON `retry_after` and the page's `<meta http-equiv="refresh">`. Integer 1-99999; anything else stops the container at start. Shared with the panel. |
-| `BACKSOON_ADMIN_USER` | none | Panel administrator user. Required by the panel. |
-| `BACKSOON_ADMIN_PASSWORD_HASH` | none | bcrypt hash of the administrator password. Preferred; wins if both password variables are set. |
+| `BACKSOON_ADMIN_USER` | none | User name of the panel's owner. Required by the panel. Other users are added in the panel itself (see [Users and roles](#users-and-roles)). |
+| `BACKSOON_ADMIN_PASSWORD_HASH` | none | bcrypt hash of the owner's password. Preferred; wins if both password variables are set. |
 | `BACKSOON_ADMIN_PASSWORD` | none | Plaintext alternative (at most 72 bytes). Accepted, with a warning in the panel log. |
 | `BACKSOON_SESSION_SECRET` | none | Random secret of at least 32 bytes that signs the 12-hour session cookies. Required by the panel. Signing out revokes the session at once, but the panel keeps that list in memory: after a panel restart, a copy of a signed-out cookie works again until its 12 hours end. Change this secret to end every session. |
 | `BACKSOON_ADMIN_HOST_BIND` | `127.0.0.1` | Host address the panel's port is published on. Use `0.0.0.0` only if NPM or someone else must reach it through the host's IP; `127.0.0.1` keeps it local (SSH tunnel). |
@@ -110,7 +110,26 @@ The panel is available in English and Spanish. It picks the language from the `b
 
 4. **Publish the panel through NPM** with a proxy host such as `backsoon.example.com` → `backsoon-admin:8080`, with SSL. The session cookie is `Secure`, so the panel signs in only over HTTPS or on `http://localhost`: its published host port (`127.0.0.1:8181` by default, see `BACKSOON_ADMIN_HOST_BIND`) is meant for an SSH tunnel, not plain `http://` access. Requests to that port reach the panel from the network's gateway address, which the recommended `BACKSOON_TRUSTED_PROXIES` range includes, so whoever can reach the port can also set `X-Real-IP`: keep it on `127.0.0.1`. The panel trusts the `X-Real-IP` header that NPM sets for the login rate limit (5 failed attempts per IP every 15 minutes). Without `BACKSOON_TRUSTED_PROXIES` the panel accepts that header from any peer, so any container attached to the `proxy` network could forge it and bypass the limit (bcrypt remains the brake). Set `BACKSOON_TRUSTED_PROXIES` to the `proxy` network range, which `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` prints, so only that network can set it; the panel logs the trusted ranges at start. NPM's own address can change between restarts, so prefer the network range to a single address. Keep only trusted containers on that network either way. Behind a CDN, all visitors may share one address, so a few failed logins can lock out the administrator for 15 minutes. An NPM Access List or a LAN/VPN-only host adds another layer.
 
-The panel stores its metadata in the `backsoon_meta` volume (`sites.json` plus the original HTML of each page) and republishes every page from it at start, which repairs an inconsistent `backsoon_pages`. It runs as uid 65532 on a read-only root filesystem with all capabilities dropped; `backsoon-init` hands the pages volume to that user on every deploy. The panel's visual system is described in [DESIGN.md](DESIGN.md).
+The panel stores its metadata in the `backsoon_meta` volume (`sites.json` plus the original HTML of each page, and `users.json` once you add users) and republishes every page from it at start, which repairs an inconsistent `backsoon_pages`. It runs as uid 65532 on a read-only root filesystem with all capabilities dropped; `backsoon-init` hands the pages volume to that user on every deploy. The panel's visual system is described in [DESIGN.md](DESIGN.md).
+
+### Users and roles
+
+The panel has two roles.
+
+- **Owner.** The user from `BACKSOON_ADMIN_USER`, with the password from `BACKSOON_ADMIN_PASSWORD_HASH` or `BACKSOON_ADMIN_PASSWORD`. It manages users and pages. It cannot be deleted, renamed or have its password changed from the panel: that password lives in the stack variables, and changing it there (and redeploying) ends the owner's sessions.
+- **Editor.** Every user added in the panel. Editors manage pages exactly like the owner and change their own password. They never see user management: the navbar has no **Users** entry, and the server answers `403` to every request for it, whatever the request carries.
+
+**Managing users** (owner only, **Users** in the navbar):
+
+- **Add a user** with a user name and an initial password typed twice. Names are 1 to 64 characters from `a-z 0-9 . _ -`, compared without regard to case and stored in lowercase; each is unique and never the owner's name. Passwords have at least 10 characters and at most 72 bytes (the bcrypt limit). You choose the initial password and pass it on to the user yourself.
+- **Set a new password** for a user, or **delete** a user. Each asks for a confirmation first, and each ends every session of that user immediately, also across panel restarts.
+- The list shows each user's name, when it was created and when its password last changed.
+
+**Own password.** Every editor opens **My password** in the navbar, gives the current password and the new one twice, and changes it. Their other sessions end; the browser that made the change stays signed in. The check of the current password is rate limited (5 wrong attempts per 15 minutes per user). The owner's page explains where the owner's password is set instead of offering a form.
+
+**Storage and logs.** Users are stored in `users.json` in the `backsoon_meta` volume, written atomically with mode `0600`, as bcrypt cost 12 hashes only. A corrupt or invalid file stops the panel at start with a message that names it; fix the file, or remove it to delete every added user. Back it up with `backsoon_meta`. Sign-in uses the same rate limit and the same single error message for an unknown user and a wrong password. The log names the user at sign-in, who added or deleted a user or set a password (and for whom), own password changes, and the user behind every page change; it never contains a password, a hash or a session cookie.
+
+**Upgrading from a version without users.** Session cookies now carry the user, so sessions issued before the upgrade stop working once: everyone, in practice the owner, signs in again after the first start of the new version. If you later set `BACKSOON_ADMIN_USER` to the name of an added user, the owner wins and that added user can no longer sign in; delete or rename them first.
 
 ## Commands
 
@@ -120,7 +139,7 @@ The panel stores its metadata in the `backsoon_meta` volume (`sites.json` plus t
 | `make test` | Builds the image and runs `test/unit.sh` (curl tests against throwaway containers on loopback ephemeral ports, `bs-unit-*` names, removed on exit, including concurrent seeding), then the panel's Go tests. |
 | `sh test/seed-race.sh` | Focused concurrent-seeding regression with two real init entrypoints and a read-only HTTP reader; checks publication, no overwrite and cleanup. |
 | `make e2e-up` / `make e2e-down` | Start / remove the NPM harness. See [docs/npm-harness.md](docs/npm-harness.md). |
-| `make e2e` | Both disposable real-NPM suites, one after the other: `make e2e-npm` (healthy routing, host/target/default fallback, POST/HEAD/JSON, 502/503/504, absent backend/restart/recovery, rollback, legitimate-503 variant, latency gate) and `make e2e-admin` (the panel through NPM: login, rate limit, CSRF, uploads, destinations, preview sandbox, publication visible on the next request). Never run them in parallel: they share the loopback ports. |
+| `make e2e` | Both disposable real-NPM suites, one after the other: `make e2e-npm` (healthy routing, host/target/default fallback, POST/HEAD/JSON, 502/503/504, absent backend/restart/recovery, rollback, legitimate-503 variant, latency gate) and `make e2e-admin` (the panel through NPM: login, rate limit, CSRF, users and roles, uploads, destinations, preview sandbox, publication visible on the next request). Never run them in parallel: they share the loopback ports. |
 
 `make lint` and `make test` need Go 1.26 or newer in addition to Docker.
 

@@ -84,7 +84,7 @@ En NPM, añade un **proxy host**. **Guardarlo es lo que activa el fallback**: NP
 | SSL | solicita o selecciona un certificado y activa **Force SSL** |
 | Advanced | vacío |
 
-Después abre `https://backsoon.example.com` e inicia sesión con `BACKSOON_ADMIN_USER` y la contraseña que convertiste en hash. El panel solo permite iniciar sesión por HTTPS.
+Después abre `https://backsoon.example.com` e inicia sesión con `BACKSOON_ADMIN_USER` y la contraseña que convertiste en hash. Ese es el propietario del panel. El panel solo permite iniciar sesión por HTTPS. Para que otras personas gestionen páginas, el propietario las añade en **Usuarios** (consulta [Usuarios y roles](../README.es.md#usuarios-y-roles)).
 
 ### 6. Comprueba que funciona
 
@@ -125,7 +125,7 @@ Después [verifica](#verificación). Para deshacerlo todo, consulta [Reversión]
 | Tipo | Nombre | Notas |
 |------|--------|-------|
 | Contenedores | `backsoon-init`, `backsoon`, `backsoon-admin`, `backsoon-npm-snippet` | `container_name` fijos, por lo que un host solo puede ejecutar un stack de backsoon. `backsoon-init` y `backsoon-npm-snippet` son de una sola ejecución y terminan con código 0. |
-| Volúmenes | `backsoon_pages`, `backsoon_meta`, `backsoon_npm_custom` | Nombres fijos. `backsoon_pages` contiene las páginas servidas; `backsoon_meta` contiene el `sites.json` del panel y el HTML original; `backsoon_npm_custom` queda vacío (sustituye al directorio de NPM cuando `BACKSOON_NPM_CUSTOM_DIR` no está definida). |
+| Volúmenes | `backsoon_pages`, `backsoon_meta`, `backsoon_npm_custom` | Nombres fijos. `backsoon_pages` contiene las páginas servidas; `backsoon_meta` contiene el `sites.json` del panel, `users.json` (los usuarios añadidos, como hashes bcrypt) y el HTML original; `backsoon_npm_custom` queda vacío (sustituye al directorio de NPM cuando `BACKSOON_NPM_CUSTOM_DIR` no está definida). |
 | Red | `proxy` (externa, o `BACKSOON_PROXY_NETWORK`) | Debe existir antes del despliegue. |
 | Puertos | `127.0.0.1:8181` → panel `8080` | `BACKSOON_ADMIN_HOST_BIND` y `BACKSOON_ADMIN_HOST_PORT`. `backsoon` no publica nada. |
 
@@ -173,7 +173,7 @@ NPM llega a `backsoon` y `backsoon-admin` por nombre de contenedor a través de 
 
 Copia [`env.example`](../env.example) a un `.env` privado (está en gitignore) y completa:
 
-- `BACKSOON_ADMIN_USER`: el usuario del panel.
+- `BACKSOON_ADMIN_USER`: el nombre de usuario del propietario del panel. Los demás usuarios se añaden en el panel.
 - `BACKSOON_ADMIN_PASSWORD_HASH`: un hash bcrypt de la contraseña.
 - `BACKSOON_SESSION_SECRET`: una cadena aleatoria de al menos 32 bytes.
 
@@ -262,7 +262,7 @@ No pongas nada en la pestaña *Advanced* de los proxy hosts: el archivo global e
 
    La cookie de sesión del panel es `Secure`, así que el inicio de sesión solo funciona por HTTPS (o en `http://localhost`, por ejemplo a través de un túnel SSH al `127.0.0.1:8181` publicado). Ten en cuenta la Access List de NPM o un host accesible solo desde la LAN o una VPN como capa adicional.
 2. Repite `nginx -t && nginx -s reload` en NPM si este es tu primer proxy host (consulta el paso 3).
-3. Abre `https://backsoon.example.com` e inicia sesión con `BACKSOON_ADMIN_USER` y la contraseña que convertiste en hash.
+3. Abre `https://backsoon.example.com` e inicia sesión con `BACKSOON_ADMIN_USER` y la contraseña que convertiste en hash. Para añadir usuarios que gestionen páginas, abre **Usuarios** (solo el propietario; consulta [Usuarios y roles](../README.es.md#usuarios-y-roles)).
 4. Crea una página a partir de la plantilla (o sube tu propio `.html`) y asígnale sus **destinos**: el dominio de la aplicación (`app1.example.com`) o el `service:port` al que reenvía NPM (`app1:3000`). Gana la primera coincidencia en este orden: dominio, después `service:port`, después la página predeterminada. Los cambios se aplican en la siguiente petición, sin reiniciar.
 
 ### Verificación
@@ -320,7 +320,7 @@ Después repite las comprobaciones de [Verificación](#verificación) (la págin
 
 ### Actualizar backsoon
 
-Trae los cambios del repositorio y vuelve a desplegar reconstruyendo: `docker compose up -d --build`, o vuelve a desplegar el stack Git en Portainer para que descargue de nuevo el repositorio y reconstruya (los nombres de las opciones de Portainer no están verificados). Las páginas existentes se conservan: la siembra nunca sobrescribe `default.html`, y el panel vuelve a publicar sus páginas desde `backsoon_meta` al arrancar.
+Trae los cambios del repositorio y vuelve a desplegar reconstruyendo: `docker compose up -d --build`, o vuelve a desplegar el stack Git en Portainer para que descargue de nuevo el repositorio y reconstruya (los nombres de las opciones de Portainer no están verificados). Las páginas existentes se conservan: la siembra nunca sobrescribe `default.html`, y el panel vuelve a publicar sus páginas desde `backsoon_meta` al arrancar. Al actualizar desde una versión sin usuarios del panel, todas las sesiones terminan una vez: vuelve a iniciar sesión tras el primer arranque (los usuarios que añadas después se conservan en `backsoon_meta` al actualizar).
 
 ### Qué se ha verificado
 

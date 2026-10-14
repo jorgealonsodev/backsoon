@@ -497,7 +497,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 	if edit {
 		verb, notice = "updated", "saved"
 	}
-	s.log.Printf("page %s id=%s name=%q destinations=%v", verb, saved.ID, saved.Name, dests)
+	s.log.Printf("page %s by=%q id=%s name=%q destinations=%v", verb, sess.User, saved.ID, saved.Name, dests)
 	if pubErr != nil {
 		notice = "publish-failed"
 	}
@@ -613,7 +613,7 @@ func (s *Server) deletePage(w http.ResponseWriter, r *http.Request, sess auth.Se
 		s.internalError(w, r, sess, "delete page", err)
 		return
 	}
-	s.log.Printf("page deleted id=%s name=%q destinations=%v", id, site.Name, dests)
+	s.log.Printf("page deleted by=%q id=%s name=%q destinations=%v", sess.User, id, site.Name, dests)
 	http.Redirect(w, r, "/?notice="+notice, http.StatusSeeOther)
 }
 

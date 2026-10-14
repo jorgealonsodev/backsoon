@@ -1,0 +1,180 @@
+{{define "errsummary"}}{{if .Summary}}
+<div class="alert alert-danger" role="alert">{{template "icon" "alert"}}<div><p class="alert-title">{{t "form.summary"}}</p>
+<ul class="summary">
+{{- range .Summary}}
+<li><a href="#{{.Anchor}}">{{.Text}}</a></li>
+{{- end}}
+</ul></div></div>
+{{end}}{{end}}
+
+{{define "pwnew"}}<div class="field">
+<label for="password">{{t "user.field.password"}}</label>
+<input type="password" id="password" name="password" autocomplete="new-password" {{.Errs.Describe "password" true}}>
+<p class="hint" id="password-hint">{{t "hint.user.password"}}</p>
+{{- with .Errs.Issues "password"}}
+<ul class="err-list" id="password-error">{{template "issues" .}}</ul>
+{{- end}}
+</div>
+<div class="field">
+<label for="confirm_password">{{t "user.field.confirm_password"}}</label>
+<input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" {{.Errs.Describe "confirm_password" false}}>
+{{- with .Errs.Issues "confirm_password"}}
+<ul class="err-list" id="confirm_password-error">{{template "issues" .}}</ul>
+{{- end}}
+</div>{{end}}
+
+{{define "users"}}{{template "top" .}}
+<main id="main" class="container" data-view="users">
+{{template "notice" .}}
+{{template "errsummary" .}}
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header">
+<div>
+<h1 class="card-title">{{t "users.heading"}}</h1>
+<p class="sub">{{t "users.sub"}}</p>
+</div>
+</div>
+<div class="card-body"><div class="alert alert-info">{{template "icon" "info"}}<div>{{t "users.owner" .Owner}}</div></div></div>
+{{- if .Users}}
+<table class="table" role="table">
+<caption class="sr">{{t "users.caption"}}</caption>
+<thead role="rowgroup">
+<tr role="row"><th scope="col" role="columnheader">{{t "users.col.name"}}</th><th scope="col" role="columnheader">{{t "users.col.created"}}</th><th scope="col" role="columnheader">{{t "users.col.changed"}}</th><th scope="col" role="columnheader"><span class="sr">{{t "sr.actions"}}</span></th></tr>
+</thead>
+<tbody role="rowgroup">
+{{- range .Users}}
+<tr role="row" class="entry">
+<td role="cell" class="c-name"><span class="name">{{.Name}}</span></td>
+<td role="cell" class="c-date"><span class="sub-label">{{t "users.col.created"}}</span> <time datetime="{{.CreatedISO}}">{{.CreatedText}}</time></td>
+<td role="cell" class="c-date"><span class="sub-label">{{t "users.col.changed"}}</span> <time datetime="{{.ChangedISO}}">{{.ChangedText}}</time></td>
+<td role="cell" class="c-actions">
+<details class="menu" name="row-menu">
+<summary aria-label="{{t "dir.actions.for" .Name}}">{{template "icon" "dots"}}</summary>
+<div class="menu-list">
+<a href="/users/password?user={{.Name}}">{{template "icon" "edit"}}{{t "users.setpw"}}</a>
+<form method="post" action="/users/delete">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<input type="hidden" name="user" value="{{.Name}}">
+<button type="submit" class="is-danger">{{template "icon" "trash"}}{{t "users.delete"}}</button>
+</form>
+</div>
+</details>
+</td>
+</tr>
+{{- end}}
+</tbody>
+</table>
+{{- else}}
+<section class="card-body empty" aria-labelledby="users-empty-title">
+<h2 id="users-empty-title">{{t "users.empty.title"}}</h2>
+<p>{{t "users.empty.body"}}</p>
+</section>
+{{- end}}
+</div>
+
+<form class="card" method="post" action="/users" aria-labelledby="add-title">
+<div class="card-header"><h2 class="card-title" id="add-title">{{t "users.add.heading"}}</h2></div>
+<div class="card-body stack">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field">
+<label for="name">{{t "user.field.name"}}</label>
+<input type="text" id="name" name="name" value="{{.Name}}" autocomplete="off" autocapitalize="none" spellcheck="false" class="mono-field" {{.Errs.Describe "name" true}}>
+<p class="hint" id="name-hint">{{t "hint.user.name"}}</p>
+{{- with .Errs.Issues "name"}}
+<ul class="err-list" id="name-error">{{template "issues" .}}</ul>
+{{- end}}
+</div>
+{{template "pwnew" .}}
+<p class="hint">{{t "users.add.hint"}}</p>
+</div>
+<div class="card-footer actions">
+<button class="btn btn-primary" type="submit">{{template "icon" "plus"}}{{t "users.add.btn"}}</button>
+</div>
+</form>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "userpassword"}}{{template "top" .}}
+<main id="main" class="container container-narrow" data-view="user-password">
+<p class="crumb"><a href="/users">{{template "icon" "back"}}{{t "back.users"}}</a></p>
+{{template "errsummary" .}}
+<form class="card" method="post" action="/users/password">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header"><h1 class="card-title">{{t "user.pw.title" .User}}</h1></div>
+<div class="card-body stack">
+<div class="alert alert-warning">{{template "icon" "warn"}}<div>{{t "user.pw.warn" .User}}</div></div>
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="user" value="{{.User}}">
+<input type="hidden" name="confirm" value="true">
+{{template "pwnew" .}}
+</div>
+<div class="card-footer actions">
+<button class="btn btn-primary" type="submit">{{t "user.pw.btn"}}</button>
+<a class="btn" href="/users">{{t "form.cancel"}}</a>
+</div>
+</form>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "userdelete"}}{{template "top" .}}
+<main id="main" class="container container-narrow" data-view="user-delete">
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header"><h1 class="card-title">{{t "user.delete.title" .User}}</h1></div>
+<div class="card-body stack">
+<p>{{t "user.delete.body" .User}}</p>
+<div class="alert alert-danger">{{template "icon" "alert"}}<div>{{t "user.delete.warn"}}</div></div>
+</div>
+<form class="card-footer actions" method="post" action="/users/delete">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="user" value="{{.User}}">
+<input type="hidden" name="confirm" value="true">
+<button class="btn btn-danger" type="submit">{{t "user.delete.btn"}}</button>
+<a class="btn" href="/users">{{t "user.delete.keep"}}</a>
+</form>
+</div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "account"}}{{template "top" .}}
+<main id="main" class="container container-narrow" data-view="account">
+{{template "notice" .}}
+{{template "errsummary" .}}
+{{- if .IsOwner}}
+<div class="card">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header"><h1 class="card-title">{{t "account.heading"}}</h1></div>
+<div class="card-body stack">
+<div class="alert alert-info">{{template "icon" "info"}}<div>{{t "account.owner"}}</div></div>
+</div>
+</div>
+{{- else}}
+<form class="card" method="post" action="/account/password">
+<div class="card-status" aria-hidden="true"></div>
+<div class="card-header">
+<div>
+<h1 class="card-title">{{t "account.heading"}}</h1>
+<p class="sub">{{t "account.sub" .Who}}</p>
+</div>
+</div>
+<div class="card-body stack">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field">
+<label for="current">{{t "user.field.current"}}</label>
+<input type="password" id="current" name="current" autocomplete="current-password" {{.Errs.Describe "current" false}}>
+{{- with .Errs.Issues "current"}}
+<ul class="err-list" id="current-error">{{template "issues" .}}</ul>
+{{- end}}
+</div>
+{{template "pwnew" .}}
+<p class="hint">{{t "account.hint"}}</p>
+</div>
+<div class="card-footer actions">
+<button class="btn btn-primary" type="submit">{{t "account.btn"}}</button>
+<a class="btn" href="/">{{t "form.cancel"}}</a>
+</div>
+</form>
+{{- end}}
+</main>
+{{template "bottom" .}}{{end}}

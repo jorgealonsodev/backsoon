@@ -84,7 +84,7 @@ In NPM, add a **proxy host**. **Saving it is what activates the fallback**: NPM 
 | SSL | request or select a certificate, and turn on **Force SSL** |
 | Advanced | empty |
 
-Then open `https://backsoon.example.com` and sign in with `BACKSOON_ADMIN_USER` and the password you hashed. The panel signs in only over HTTPS.
+Then open `https://backsoon.example.com` and sign in with `BACKSOON_ADMIN_USER` and the password you hashed. That is the panel's owner. The panel signs in only over HTTPS. To let others manage pages, the owner adds them under **Users** (see [Users and roles](../README.md#users-and-roles)).
 
 ### 6. Check that it works
 
@@ -125,7 +125,7 @@ Then [verify](#verification). To undo everything, see [Rollback](#rollback). Por
 | Kind | Name | Notes |
 |------|------|-------|
 | Containers | `backsoon-init`, `backsoon`, `backsoon-admin`, `backsoon-npm-snippet` | Fixed `container_name`s, so a host can run only one backsoon stack. `backsoon-init` and `backsoon-npm-snippet` are one-shots that exit with code 0. |
-| Volumes | `backsoon_pages`, `backsoon_meta`, `backsoon_npm_custom` | Fixed names. `backsoon_pages` holds the served pages; `backsoon_meta` holds the panel's `sites.json` and original HTML; `backsoon_npm_custom` stays empty (it stands in for NPM's directory when `BACKSOON_NPM_CUSTOM_DIR` is unset). |
+| Volumes | `backsoon_pages`, `backsoon_meta`, `backsoon_npm_custom` | Fixed names. `backsoon_pages` holds the served pages; `backsoon_meta` holds the panel's `sites.json`, `users.json` (the added users, as bcrypt hashes) and original HTML; `backsoon_npm_custom` stays empty (it stands in for NPM's directory when `BACKSOON_NPM_CUSTOM_DIR` is unset). |
 | Network | `proxy` (external, or `BACKSOON_PROXY_NETWORK`) | Must exist before the deploy. |
 | Ports | `127.0.0.1:8181` → panel `8080` | `BACKSOON_ADMIN_HOST_BIND` and `BACKSOON_ADMIN_HOST_PORT`. `backsoon` publishes nothing. |
 
@@ -173,7 +173,7 @@ NPM reaches `backsoon` and `backsoon-admin` by container name over this network.
 
 Copy [`env.example`](../env.example) to a private `.env` (it is gitignored) and fill in:
 
-- `BACKSOON_ADMIN_USER`: the panel user.
+- `BACKSOON_ADMIN_USER`: the panel owner's user name. Other users are added in the panel.
 - `BACKSOON_ADMIN_PASSWORD_HASH`: a bcrypt hash of the password.
 - `BACKSOON_SESSION_SECRET`: a random string of at least 32 bytes.
 
@@ -262,7 +262,7 @@ Do not put anything in the proxy hosts' *Advanced* tab: the global file is the o
 
    The panel's session cookie is `Secure`, so the login only works over HTTPS (or on `http://localhost`, for example through an SSH tunnel to the published `127.0.0.1:8181`). Keep the NPM Access List or a LAN/VPN-only host in mind for an extra layer.
 2. Repeat `nginx -t && nginx -s reload` in NPM if this is your first proxy host (see step 3).
-3. Open `https://backsoon.example.com`, log in with `BACKSOON_ADMIN_USER` and the password you hashed.
+3. Open `https://backsoon.example.com`, log in with `BACKSOON_ADMIN_USER` and the password you hashed. To add users who manage pages, open **Users** (owner only; see [Users and roles](../README.md#users-and-roles)).
 4. Create a page from the template (or upload your own `.html`) and give it its **destinations**: the application's domain (`app1.example.com`) or the `service:port` NPM forwards to (`app1:3000`). The first match wins in the order domain, then `service:port`, then the default page. Changes apply to the next request, with no restart.
 
 ### Verification
@@ -320,7 +320,7 @@ Then repeat the checks in [Verification](#verification) (the maintenance page wi
 
 ### Updating backsoon
 
-Pull the repository changes and redeploy with a rebuild: `docker compose up -d --build`, or redeploy the Git stack in Portainer so that it pulls the repository again and rebuilds (the Portainer option names are not verified). Existing pages survive: seeding never overwrites `default.html`, and the panel republishes its pages from `backsoon_meta` at start.
+Pull the repository changes and redeploy with a rebuild: `docker compose up -d --build`, or redeploy the Git stack in Portainer so that it pulls the repository again and rebuilds (the Portainer option names are not verified). Existing pages survive: seeding never overwrites `default.html`, and the panel republishes its pages from `backsoon_meta` at start. Upgrading from a version without panel users ends every session once: sign in again after the first start (users you add later are kept in `backsoon_meta` across updates).
 
 ### What has been verified
 

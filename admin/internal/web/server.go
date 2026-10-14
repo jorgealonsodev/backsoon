@@ -44,16 +44,17 @@ type Options struct {
 
 // Server is the panel handler.
 type Server struct {
-	store    *pages.Store
-	users    *users.Store
-	accounts *auth.Accounts
-	sessions *auth.Manager
-	limiter  *auth.Limiter
-	drafts   *draftStore
-	secret   []byte
-	log      *log.Logger
-	now      func() time.Time
-	trusted  []netip.Prefix
+	store     *pages.Store
+	users     *users.Store
+	ownerName string
+	accounts  *auth.Accounts
+	sessions  *auth.Manager
+	limiter   *auth.Limiter
+	drafts    *draftStore
+	secret    []byte
+	log       *log.Logger
+	now       func() time.Time
+	trusted   []netip.Prefix
 
 	tpl           map[string]*template.Template // one parsed set per language
 	style         template.CSS
@@ -97,6 +98,7 @@ func New(o Options) (http.Handler, error) {
 	s := &Server{
 		store:         o.Store,
 		users:         o.Users,
+		ownerName:     o.User,
 		accounts:      accounts,
 		sessions:      auth.NewManager(o.SessionSecret, o.Now, accounts),
 		limiter:       auth.NewLimiter(auth.LoginMaxAttempts, auth.LoginWindow, o.Now),
@@ -128,6 +130,13 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /pages/{id}", s.signedIn(s.updatePage))
 	m.HandleFunc("POST /pages/{id}/delete", s.signedIn(s.deletePage))
 	m.HandleFunc("GET /pages/{id}/preview", s.signedIn(s.preview))
+	m.HandleFunc("GET /users", s.ownerOnly(s.listUsers))
+	m.HandleFunc("POST /users", s.ownerOnly(s.createUser))
+	m.HandleFunc("GET /users/password", s.ownerOnly(s.userPasswordForm))
+	m.HandleFunc("POST /users/password", s.ownerOnly(s.setUserPassword))
+	m.HandleFunc("POST /users/delete", s.ownerOnly(s.deleteUser))
+	m.HandleFunc("GET /account", s.signedIn(s.account))
+	m.HandleFunc("POST /account/password", s.signedIn(s.changeOwnPassword))
 	m.HandleFunc("/", s.signedIn(s.notFound))
 }
 
