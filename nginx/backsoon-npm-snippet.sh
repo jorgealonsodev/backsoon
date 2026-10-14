@@ -22,7 +22,7 @@ log() { printf 'backsoon-npm-snippet: %s\n' "$*"; }
 die() { log "$*" >&2; exit 1; }
 
 if [ -z "${BACKSOON_NPM_CUSTOM_DIR:-}" ]; then
-  log "BACKSOON_NPM_CUSTOM_DIR is not set: nothing installed"
+  log "BACKSOON_NPM_CUSTOM_DIR is not set: nothing installed; install npm/server_proxy.conf in NPM by hand, then reload NPM (docs/install.md)"
   exit 0
 fi
 case ${BACKSOON_NPM_INTERCEPT_503:-true} in
@@ -45,9 +45,10 @@ while IFS= read -r l || [ -n "$l" ]; do
 done < "$SRC" > "$tmp"
 chmod 0644 "$tmp"
 if [ -f "$DEST" ] && cmp -s "$tmp" "$DEST"; then
-  log "$BACKSOON_NPM_CUSTOM_DIR/server_proxy.conf unchanged"
+  log "$BACKSOON_NPM_CUSTOM_DIR/server_proxy.conf unchanged; no reload needed"
   exit 0
 fi
 mv -f "$tmp" "$DEST"
 trap - EXIT
-log "installed $BACKSOON_NPM_CUSTOM_DIR/server_proxy.conf; NPM applies it at its next reload (save any proxy host, or restart NPM)"
+log "installed $BACKSOON_NPM_CUSTOM_DIR/server_proxy.conf"
+log "ACTION NEEDED: reload Nginx Proxy Manager so it applies the file: save any proxy host in NPM, restart the NPM container, or run: docker exec <npm> nginx -s reload"

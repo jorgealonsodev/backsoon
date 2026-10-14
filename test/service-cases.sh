@@ -175,6 +175,8 @@ case_observability() {
 nopage.test 192.168.1.10_8081 503 /target/192.168.1.10_8081.html
 zzz.test _none 503 /default.html'
   expect_eq "access log lines (healthz is not logged)" "$want" "$lines"
+  first=$(printf '%s\n' "$logs" | grep -v '^/docker-entrypoint.sh: ' | grep '\.sh: ' | head -n 1)
+  expect_has "the first backsoon message reminds to reload NPM" "$first" '01-backsoon-reminder.sh: reminder: after installing or updating backsoon, reload Nginx Proxy Manager'
   [ -n "$gateway" ] && expect_lacks "logs never contain the client address" "$logs" "$gateway"
   for n in "$R5_NAME" "$DEF_NAME" "$NODEF_NAME"; do
     [ -n "$gateway" ] && expect_lacks "$n logs never contain the client address" "$(docker logs "$n" 2>&1)" "$gateway"
@@ -323,20 +325,24 @@ case_npm_snippet() {
   out=$(snippet "$ID-npm-off" 2>&1); code=$?
   expect_eq "unset BACKSOON_NPM_CUSTOM_DIR: exit 0" 0 "$code"
   expect_has "unset BACKSOON_NPM_CUSTOM_DIR: says nothing was installed" "$out" 'BACKSOON_NPM_CUSTOM_DIR is not set'
+  expect_has "unset BACKSOON_NPM_CUSTOM_DIR: says how to install by hand" "$out" 'install npm/server_proxy.conf in NPM by hand, then reload NPM'
   expect_eq "unset BACKSOON_NPM_CUSTOM_DIR: writes nothing" "" "$(npm_sh "$ID-npm-off" 'ls -A /npm-custom')"
 
   make_volume "$ID-npm"
   out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" 2>&1); code=$?
   expect_eq "install: exit 0" 0 "$code"
   expect_has "install: names the host file" "$out" "installed $dir/server_proxy.conf"
-  expect_has "install: says when NPM applies it" "$out" 'next reload'
+  expect_has "install: asks to reload NPM on a line of its own" "$out" '
+backsoon-npm-snippet: ACTION NEEDED: reload Nginx Proxy Manager'
+  expect_has "install: names the ways to reload" "$out" 'save any proxy host in NPM, restart the NPM container, or run: docker exec <npm> nginx -s reload'
   expect_eq "install: only server_proxy.conf, no temporary file left" server_proxy.conf "$(npm_sh "$ID-npm" 'ls -A /npm-custom')"
   expect_eq "install: identical to npm/server_proxy.conf" "$canonical" "$(npm_sh "$ID-npm" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
   expect_eq "install: mode 644" 644 "$(npm_sh "$ID-npm" 'stat -c %a /npm-custom/server_proxy.conf')"
 
   out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" 2>&1); code=$?
   expect_eq "redeploy: exit 0" 0 "$code"
-  expect_has "redeploy: reports the file unchanged" "$out" 'unchanged'
+  expect_has "redeploy: reports the file unchanged and no reload needed" "$out" 'unchanged; no reload needed'
+  expect_lacks "redeploy: does not ask for a reload" "$out" 'ACTION NEEDED'
   expect_eq "redeploy: file still canonical" "$canonical" "$(npm_sh "$ID-npm" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
 
   out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_INTERCEPT_503=false 2>&1); code=$?

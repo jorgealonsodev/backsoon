@@ -69,7 +69,7 @@ docker ps -a --filter name=backsoon --format '{{.Names}}: {{.Status}}'
 docker logs backsoon-npm-snippet
 ```
 
-`backsoon` y `backsoon-admin` deben estar `healthy`, `backsoon-init` y `backsoon-npm-snippet` deben estar `Exited (0)`, y el segundo comando debe decir `installed` (`unchanged` en un redespliegue posterior). Si `backsoon-admin` se reinicia continuamente, `docker logs backsoon-admin` indica qué variable falta o no es válida.
+`backsoon` y `backsoon-admin` deben estar `healthy`, `backsoon-init` y `backsoon-npm-snippet` deben estar `Exited (0)`, y el segundo comando debe decir `installed`, seguido de `ACTION NEEDED: reload Nginx Proxy Manager…` (el paso 5 hace esa recarga); en un redespliegue posterior dice `unchanged; no reload needed`. Si `backsoon-admin` se reinicia continuamente, `docker logs backsoon-admin` indica qué variable falta o no es válida.
 
 ### 5. Crea el proxy host del panel
 
