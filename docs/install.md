@@ -16,7 +16,7 @@ Then [verify](#verification). To undo everything, see [Rollback](#rollback).
 ## Prerequisites
 
 - A Docker host with Docker Compose v2 (checked with Docker 29.9 and Compose 5.6) that you can reach with `docker`, plus internet access for the first build.
-- A running NPM container. The tested version is `jc21/nginx-proxy-manager:2.16.0`; other versions are untested (see [After updating NPM](#after-updating-npm)).
+- A running NPM container. The tested versions are `jc21/nginx-proxy-manager:2.16.0` and `2.15.1` (both end-to-end suites); other versions are untested (see [After updating NPM](#after-updating-npm)).
 - DNS records for the panel (for example `backsoon.example.com`) and for your applications that point to NPM.
 - Nothing is pulled from a registry for backsoon itself: the stack **builds** its two images from this repository (`nginx/Dockerfile` and `admin/Dockerfile`, build context = repository root) and tags them `backsoon:local` and `backsoon-admin:local`. The first build downloads three pinned base images (`nginx`, `golang`, `distroless`) and takes a few minutes.
 
@@ -32,7 +32,13 @@ Then [verify](#verification). To undo everything, see [Rollback](#rollback).
 
 ## Step 1: the `proxy` network, with NPM attached
 
-Check whether the network already exists, and create it if not:
+If NPM already shares a user-defined network that you want backsoon to join, use it instead of creating `proxy`: set `BACKSOON_PROXY_NETWORK` to its name in step 2a and skip the rest of this step. List NPM's networks with:
+
+```sh
+docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' <npm>
+```
+
+Pick a network whose other members you trust (ideally NPM alone), not NPM's database network. Otherwise, check whether the `proxy` network already exists, and create it if not:
 
 ```sh
 docker network ls --filter name=^proxy$
@@ -70,11 +76,13 @@ Copy [`env.example`](../env.example) to a private `.env` (it is gitignored) and 
 - `BACKSOON_ADMIN_PASSWORD_HASH`: a bcrypt hash of the password.
 - `BACKSOON_SESSION_SECRET`: a random string of at least 32 bytes.
 
-Generate the hash and the secret, and enter the hash with the quoting that keeps its `$` characters intact, by following steps 1 to 3 of [Admin panel](../README.md#admin-panel) in the README. Without a user, a password or hash, and a secret, the panel refuses to start and names the missing variable; `backsoon` keeps serving either way. The remaining variables are optional: `BACKSOON_REFRESH` (default `10`) and `BACKSOON_TRUSTED_PROXIES`. Set the latter to the `proxy` network range so that only NPM's network can set the client address of the login rate limit:
+Generate the hash and the secret, and enter the hash with the quoting that keeps its `$` characters intact, by following steps 1 to 3 of [Admin panel](../README.md#admin-panel) in the README. Without a user, a password or hash, and a secret, the panel refuses to start and names the missing variable; `backsoon` keeps serving either way. The remaining variables are optional: `BACKSOON_REFRESH` (default `10`), `BACKSOON_PROXY_NETWORK` (default `proxy`; the network from step 1) and `BACKSOON_TRUSTED_PROXIES`. Set the latter to the range of that network so that only NPM's network can set the client address of the login rate limit:
 
 ```sh
 docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
 ```
+
+(replace `proxy` with your `BACKSOON_PROXY_NETWORK`).
 
 For example `BACKSOON_TRUSTED_PROXIES=172.18.0.0/16`. At start the panel logs `login rate limit: X-Real-IP trusted from 172.18.0.0/16`; an invalid value stops it with a message naming the variable.
 
@@ -201,7 +209,7 @@ NPM includes the file optionally, so the reload does not fail. The `backsoon` co
 docker exec <npm> nginx -t
 ```
 
-Then repeat the checks in [Verification](#verification) (the maintenance page with a stopped application, and NPM starting with `backsoon` stopped), or run `make e2e` after setting the new image version in `compose.test.yml` (see [the harness guide](npm-harness.md)).
+Then repeat the checks in [Verification](#verification) (the maintenance page with a stopped application, and NPM starting with `backsoon` stopped), or run `BACKSOON_TEST_NPM_IMAGE=jc21/nginx-proxy-manager:<version> make e2e` against the new version (see [the harness guide](npm-harness.md)).
 
 ## Updating backsoon
 

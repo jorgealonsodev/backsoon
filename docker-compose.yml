@@ -1,6 +1,7 @@
 # backsoon production stack (single stack, e.g. Portainer). Build context is the repository root.
-# Prerequisite: the external network "proxy" exists and Nginx Proxy Manager is attached to it.
-# No published ports: NPM reaches backsoon and backsoon-admin through the "proxy" network only.
+# Prerequisite: an external network that Nginx Proxy Manager is attached to, named "proxy" or
+# whatever BACKSOON_PROXY_NETWORK says (e.g. an existing NPM network such as npm-nw).
+# No published ports: NPM reaches backsoon and backsoon-admin through that network only.
 # backsoon-admin (the panel) is optional for serving: backsoon never depends on it (RNF-4a).
 
 x-backsoon-build: &backsoon-build
@@ -90,6 +91,7 @@ services:
 networks:
   proxy:
     external: true
+    name: ${BACKSOON_PROXY_NETWORK:-proxy}
 
 volumes:
   backsoon_pages:

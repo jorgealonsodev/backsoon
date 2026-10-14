@@ -67,6 +67,7 @@ The example lists every variable the stack reads. Its secrets are deliberately b
 | `BACKSOON_ADMIN_PASSWORD_HASH` | none | bcrypt hash of the administrator password. Preferred; wins if both password variables are set. |
 | `BACKSOON_ADMIN_PASSWORD` | none | Plaintext alternative (at most 72 bytes). Accepted, with a warning in the panel log. |
 | `BACKSOON_SESSION_SECRET` | none | Random secret of at least 32 bytes that signs the 12-hour session cookies. Required by the panel. Signing out revokes the session at once, but the panel keeps that list in memory: after a panel restart, a copy of a signed-out cookie works again until its 12 hours end. Change this secret to end every session. |
+| `BACKSOON_PROXY_NETWORK` | `proxy` | Name of the existing external Docker network shared with NPM, for example an NPM network such as `npm-nw`. |
 | `BACKSOON_TRUSTED_PROXIES` | none | IP addresses or CIDR ranges, separated by commas or spaces, allowed to set the `X-Real-IP` header that keys the login rate limit; set it to the `proxy` network range, for example `172.18.0.0/16`. A peer outside the list is limited by its own address. Unset, the panel believes `X-Real-IP` from any peer. An invalid entry stops the panel at start. |
 
 Without a user, a password or hash, and a secret the panel exits at start with a message naming the missing variable; it never runs without login. `backsoon` does not depend on the panel and keeps serving pages if the panel is stopped or misconfigured.

@@ -11,7 +11,7 @@ x-test-label: &test-label
 
 services:
   npm:
-    image: jc21/nginx-proxy-manager:2.16.0
+    image: ${BACKSOON_TEST_NPM_IMAGE:-jc21/nginx-proxy-manager:2.16.0}
     environment:
       DISABLE_IPV6: "true"
     ports:
@@ -156,7 +156,7 @@ services:
   # Run via `sh test/harness.sh fixtures`.
   fixtures:
     profiles: [tools]
-    image: jc21/nginx-proxy-manager:2.16.0
+    image: ${BACKSOON_TEST_NPM_IMAGE:-jc21/nginx-proxy-manager:2.16.0}
     entrypoint: ["sh", "-c"]
     command:
       - find /pages -mindepth 1 -delete && cp -R /fixtures/pages/. /pages/ && chmod -R a+rX /pages

@@ -51,6 +51,36 @@ else
   skip "compose.test.yml not present"
 fi
 
+# proxy_network [VALUE]: the external network name docker-compose.yml resolves, with
+# BACKSOON_PROXY_NETWORK unset or set to VALUE.
+proxy_network() {
+  if [ $# -eq 0 ]; then
+    env -u BACKSOON_PROXY_NETWORK docker compose -f docker-compose.yml config --format json
+  else
+    BACKSOON_PROXY_NETWORK=$1 docker compose -f docker-compose.yml config --format json
+  fi 2>/dev/null | python3 -I -c 'import json, sys; n = json.load(sys.stdin)["networks"]["proxy"]; print(n["name"] if n.get("external") else "not-external")' 2>/dev/null
+}
+# npm_image [VALUE]: the NPM image of the test stack, with BACKSOON_TEST_NPM_IMAGE unset or VALUE.
+npm_image() {
+  if [ $# -eq 0 ]; then
+    env -u BACKSOON_TEST_NPM_IMAGE docker compose --profile '*' -f compose.test.yml config --format json
+  else
+    BACKSOON_TEST_NPM_IMAGE=$1 docker compose --profile '*' -f compose.test.yml config --format json
+  fi 2>/dev/null | python3 -I -c 'import json, sys; s = json.load(sys.stdin)["services"]; print(s["npm"]["image"], s["fixtures"]["image"])' 2>/dev/null
+}
+if command -v python3 >/dev/null 2>&1; then
+  got=$(proxy_network)
+  if [ "$got" = proxy ]; then pass "the external network defaults to proxy"; else fail "the external network defaults to proxy" "got [$got]"; fi
+  got=$(proxy_network npm-nw)
+  if [ "$got" = npm-nw ]; then pass "BACKSOON_PROXY_NETWORK names the external network"; else fail "BACKSOON_PROXY_NETWORK names the external network" "got [$got]"; fi
+  got=$(npm_image)
+  if [ "$got" = 'jc21/nginx-proxy-manager:2.16.0 jc21/nginx-proxy-manager:2.16.0' ]; then pass "the test NPM defaults to 2.16.0"; else fail "the test NPM defaults to 2.16.0" "got [$got]"; fi
+  got=$(npm_image jc21/nginx-proxy-manager:2.15.1)
+  if [ "$got" = 'jc21/nginx-proxy-manager:2.15.1 jc21/nginx-proxy-manager:2.15.1' ]; then pass "BACKSOON_TEST_NPM_IMAGE selects the test NPM"; else fail "BACKSOON_TEST_NPM_IMAGE selects the test NPM" "got [$got]"; fi
+else
+  skip "python3 not available: network and NPM image overrides not checked"
+fi
+
 prod=$(docker compose -f docker-compose.yml config 2>/dev/null)
 serving=$(printf '%s\n' "$prod" | awk '/^  backsoon:$/ { f = 1; next } /^  [^ ]/ { f = 0 } f')
 if printf '%s\n' "$prod" | grep -Eq '^ +(ports|published):'; then fail "production compose publishes no ports"; else pass "production compose publishes no ports"; fi

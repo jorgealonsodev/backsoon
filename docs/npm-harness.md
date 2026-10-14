@@ -45,7 +45,7 @@ For `test/e2e.sh`: run compose through `sh test/harness.sh compose <args>` (righ
 
 | Image | Tag |
 |-------|-----|
-| `jc21/nginx-proxy-manager` | `2.16.0` |
+| `jc21/nginx-proxy-manager` | `2.16.0` (override: `BACKSOON_TEST_NPM_IMAGE`, e.g. `jc21/nginx-proxy-manager:2.15.1`) |
 | `traefik/whoami` | `v1.12.0` |
 | `nginx` (base for built `backsoon`, private `app-errors`) | `1.30.5-alpine-slim`, digest `32463212…` (`nginx/Dockerfile` and test compose) |
 
