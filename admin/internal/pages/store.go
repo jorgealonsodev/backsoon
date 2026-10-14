@@ -33,6 +33,35 @@ var (
 	ErrInvalidName      = errors.New("invalid page name")
 )
 
+// NameProblem is the stable code of why a page name was refused.
+type NameProblem string
+
+// The reasons a page name is refused.
+const (
+	NameRequired    NameProblem = "required"
+	NameInvalidText NameProblem = "invalid-text"
+	NameControl     NameProblem = "control"
+)
+
+// NameError is the error behind ErrInvalidName: a code (and Max for NameInvalidText) for the web
+// layer to translate, and the English text in Error.
+type NameError struct {
+	Problem NameProblem
+	Max     int
+}
+
+func (e *NameError) Unwrap() error { return ErrInvalidName }
+
+func (e *NameError) Error() string {
+	switch e.Problem {
+	case NameRequired:
+		return ErrInvalidName.Error() + ": the name is required"
+	case NameInvalidText:
+		return fmt.Sprintf("%v: use valid text of at most %d characters", ErrInvalidName, e.Max)
+	}
+	return ErrInvalidName.Error() + ": the name contains control characters"
+}
+
 // Site is a page: a name, the targets it is published for and its last modification time.
 type Site struct {
 	ID        string    `json:"id"`
@@ -506,13 +535,13 @@ func cleanName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "":
-		return "", fmt.Errorf("%w: the name is required", ErrInvalidName)
+		return "", &NameError{Problem: NameRequired}
 	case !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxNameRunes:
-		return "", fmt.Errorf("%w: use valid text of at most %d characters", ErrInvalidName, MaxNameRunes)
+		return "", &NameError{Problem: NameInvalidText, Max: MaxNameRunes}
 	}
 	for _, r := range name {
 		if unicode.IsControl(r) {
-			return "", fmt.Errorf("%w: the name contains control characters", ErrInvalidName)
+			return "", &NameError{Problem: NameControl}
 		}
 	}
 	return name, nil

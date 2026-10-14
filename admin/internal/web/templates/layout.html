@@ -7,7 +7,7 @@
 {{define "chip"}}<li class="chip{{if .Hit}} is-hit{{end}}">{{template "mark" .}}<span class="sr">{{.ChipLabel}}</span><code>{{.Value}}</code></li>{{end}}
 
 {{define "top"}}<!doctype html>
-<html lang="en">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,16 +17,17 @@
 <style nonce="{{.Nonce}}">{{.Style}}</style>
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main">{{t "skip"}}</a>
 {{- if .Authed}}
 <header class="navbar">
 <div class="container navbar-inner">
 <a class="brand" href="/">{{template "logo"}}<span>backsoon</span></a>
 <div class="navbar-end">
+{{template "langswitch" .}}
 <span class="who">{{.Who}}</span>
 <form class="inline-form" method="post" action="/logout">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<button class="btn" type="submit">Sign out</button>
+<button class="btn" type="submit">{{t "nav.signout"}}</button>
 </form>
 </div>
 </div>
@@ -34,10 +35,12 @@
 {{- end}}
 {{end}}
 
+{{define "langswitch"}}<nav class="lang" aria-label="{{t "lang.label"}}">{{if eq .Lang "es"}}<span class="lang-current" lang="es" aria-current="true">ES<span class="sr"> – Español</span></span>{{else}}<a href="{{.LangHref "es"}}" lang="es" hreflang="es">ES<span class="sr"> – Español</span></a>{{end}}<span class="lang-sep" aria-hidden="true">/</span>{{if eq .Lang "en"}}<span class="lang-current" lang="en" aria-current="true">EN<span class="sr"> – English</span></span>{{else}}<a href="{{.LangHref "en"}}" lang="en" hreflang="en">EN<span class="sr"> – English</span></a>{{end}}</nav>{{end}}
+
 {{define "bottom"}}</body>
 </html>
 {{end}}
 
-{{define "notice"}}{{with .Notice}}<div class="alert {{if .Warn}}alert-warning{{else}}alert-success{{end}}" role="status">{{if .Warn}}{{template "icon" "warn"}}{{else}}{{template "icon" "check"}}{{end}}<div>{{if .Warn}}<strong>Warning.</strong> {{end}}{{.Text}}</div></div>{{end}}{{end}}
+{{define "notice"}}{{with .Notice}}<div class="alert {{if .Warn}}alert-warning{{else}}alert-success{{end}}" role="status">{{if .Warn}}{{template "icon" "warn"}}{{else}}{{template "icon" "check"}}{{end}}<div>{{if .Warn}}<strong>{{t "sr.warning"}}</strong> {{end}}{{.Text}}</div></div>{{end}}{{end}}
 
-{{define "issues"}}{{range .}}<li class="err"><span class="sr">Error: </span>{{if .Subject}}<code>{{.Subject}}</code> {{end}}{{.Text}}</li>{{end}}{{end}}
+{{define "issues"}}{{range .}}<li class="err"><span class="sr">{{t "sr.error"}}</span>{{if .Subject}}<code>{{.Subject}}</code> {{end}}{{.Text}}</li>{{end}}{{end}}

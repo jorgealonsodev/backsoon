@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -27,8 +28,9 @@ func siteStyle() (template.CSS, error) {
 	return template.CSS(css), nil
 }
 
-func parseTemplates() (*template.Template, error) {
-	return template.ParseFS(templateFS, "templates/*.html")
+// parseTemplates parses the templates for one language: {{t "key" args...}} reads the catalogue.
+func parseTemplates(l locale) (*template.Template, error) {
+	return template.New("panel").Funcs(template.FuncMap{"t": l.T}).ParseFS(templateFS, "templates/*.html")
 }
 
 // base carries what the shared page frame needs.
@@ -40,9 +42,17 @@ type base struct {
 	Who    string // signed-in user name, shown in the header
 	CSRF   string
 	Notice *noticeView
+
+	Lang     string // language of the response: the page's lang attribute and the selector's state
+	LangNext string // where the language links return to
 }
 
 func (b *base) common() *base { return b }
+
+// LangHref is the link of the ES/EN selector that switches the panel to lang.
+func (b *base) LangHref(lang string) string {
+	return langRoute + "?to=" + lang + "&next=" + url.QueryEscape(b.LangNext)
+}
 
 type viewer interface{ common() *base }
 
@@ -51,13 +61,8 @@ type noticeView struct {
 	Warn bool
 }
 
-// notices are the only messages a ?notice= key can show.
-var notices = map[string]noticeView{
-	"created":        {Text: "Page created. backsoon serves it from the next request."},
-	"saved":          {Text: "Changes saved. backsoon serves them from the next request."},
-	"deleted":        {Text: "Page deleted. Its destinations now show the default page."},
-	"publish-failed": {Text: "The change is saved, but backsoon could not publish the files, so visitors still see the previous version. Check that the pages volume is writable, then save again.", Warn: true},
-}
+// notices are the only messages a ?notice= key can show (catalogue key "notice.<key>").
+var notices = map[string]bool{"created": false, "saved": false, "deleted": false, "publish-failed": true}
 
 type loginView struct {
 	base
@@ -221,21 +226,26 @@ func setSecurityHeaders(h http.Header) {
 	h.Set("Cache-Control", "no-store")
 }
 
-// render executes the named template into a buffer first, so a template failure becomes a clean
-// 500 instead of a half-written page.
-func (s *Server) render(w http.ResponseWriter, status int, name string, v viewer) {
+// render executes the named template, in the language of the request, into a buffer first, so a
+// template failure becomes a clean 500 instead of a half-written page.
+func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name string, v viewer) {
+	loc := localeOf(r)
 	b := v.common()
 	b.Nonce = newNonce()
 	b.Style = s.style
+	b.Lang = string(loc)
+	b.LangNext = returnPath(r)
 	var buf bytes.Buffer
-	if err := s.tpl.ExecuteTemplate(&buf, name, v); err != nil {
+	if err := s.tpl[b.Lang].ExecuteTemplate(&buf, name, v); err != nil {
 		s.log.Printf("render %s failed: %v", name, err)
 		setSecurityHeaders(w.Header())
-		http.Error(w, "Something went wrong. Nothing was changed.", http.StatusInternalServerError)
+		w.Header().Set("Vary", varyLocalized)
+		http.Error(w, loc.T("render.failed"), http.StatusInternalServerError)
 		return
 	}
 	h := w.Header()
 	setSecurityHeaders(h)
+	h.Set("Vary", varyLocalized)
 	h.Set("Content-Security-Policy", fmt.Sprintf(panelCSPFormat, b.Nonce))
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Type", "text/html; charset=utf-8")

@@ -4,23 +4,24 @@
 <div class="card">
 <div class="card-status" aria-hidden="true"></div>
 <div class="card-body">
-<h1 class="card-title center">Sign in to backsoon</h1>
+<h1 class="card-title center">{{t "login.heading"}}</h1>
 {{- if .Error}}
 <div class="alert alert-danger" id="login-error" role="alert">{{template "icon" "alert"}}<div>{{.Error}}</div></div>
 {{- end}}
 <form class="form" method="post" action="/login">
 <input type="hidden" name="login_token" value="{{.Token}}">
 <div class="field">
-<label for="user">User</label>
+<label for="user">{{t "login.user"}}</label>
 <input type="text" id="user" name="user" value="{{.User}}" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus{{if .Error}} aria-describedby="login-error"{{end}}>
 </div>
 <div class="field">
-<label for="password">Password</label>
+<label for="password">{{t "login.password"}}</label>
 <input type="password" id="password" name="password" autocomplete="current-password"{{if .Error}} aria-describedby="login-error"{{end}}>
 </div>
-<button class="btn btn-primary btn-block" type="submit">Sign in</button>
+<button class="btn btn-primary btn-block" type="submit">{{t "login.submit"}}</button>
 </form>
 </div>
 </div>
+<div class="lang-login">{{template "langswitch" .}}</div>
 </main>
 {{template "bottom" .}}{{end}}

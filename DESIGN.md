@@ -29,7 +29,7 @@ The visitor-facing maintenance page (`templates/maintenance.html`) is a separate
 
 ## Components
 
-- **Header:** mark and wordmark left; signed-in user and Sign out (POST with CSRF) right.
+- **Header:** mark and wordmark left; the ES / EN switch, the signed-in user and Sign out (POST with CSRF) right.
 - **Card:** white surface with a 2–3px orange top status line, header (title + tools), body, and a grey footer for actions or hints. Never nested.
 - **Pages table:** small uppercase column heads (NAME, DESTINATIONS, PREVIEW). Each row shows the page name with "Updated …" beneath, destination chips, a Preview button and a `details`/`summary` actions menu (Edit, Preview full size, Delete). The default page is always last, with an "Everything else" chip and no delete.
 - **Destination chip:** light mono chip with a globe icon (domain) or a server icon (service:port); the type is also visually-hidden text.
@@ -37,6 +37,7 @@ The visitor-facing maintenance page (`templates/maintenance.html`) is a separate
 - **Alerts and pills:** tinted background with matching text; amber "No destinations" pill for pages that own none.
 - **Forms:** labels above inputs, help text below, blue focus ring; "Start from" as two radio cards; primary and secondary buttons in the card footer; a separate red-outlined "Danger zone" card for delete.
 - **Confirm pages:** one card per decision (content warnings, destination move, delete) with the facts and two actions; no modals.
+- **Language switch:** two plain links, ES and EN, the current one marked with `aria-current`; in the header when signed in and under the card on the login page. It is a `GET /lang` link (no JavaScript) that sets the `backsoon_lang` cookie and returns to the same page.
 - **Preview:** sandboxed `iframe` (no tokens) inside the expanded row or the edit page; links inside it show a framed notice instead of breaking.
 
 ## Layout and motion
@@ -45,9 +46,13 @@ The visitor-facing maintenance page (`templates/maintenance.html`) is a separate
 - Below 48rem the table becomes stacked row blocks (no horizontal scroll); chips wrap whole. Below 40rem the card tools stack and the lookup field takes the full row.
 - Motion only for state (border and background colour, 150 ms ease-out); `prefers-reduced-motion` removes it.
 
+## Language
+
+The panel ships in English and Spanish; every string lives in one catalogue (`admin/internal/web/catalog.go`) shared by templates and handlers. The language is the `backsoon_lang` cookie, then `Accept-Language`, then English; `<html lang>` follows it. Spanish copy is neutral and professional: second-person "tú" imperatives, no voseo, natural phrasing rather than word-for-word translation, and the same terms throughout (destinos, página predeterminada, vista previa). Dates stay absolute UTC. Log lines and the visitor-facing maintenance page are not translated.
+
 ## Accessibility
 
-WCAG 2.2 AA in both schemes; one `h1` per page; every input labelled, errors tied with `aria-describedby`; visible focus on every control; usable at 320 px; works without JavaScript.
+WCAG 2.2 AA in both schemes; one `h1` per page; every input labelled, errors tied with `aria-describedby`; visible focus on every control; usable at 320 px; works without JavaScript; `<html lang>` matches the language shown, and the language links name their language for screen readers.
 
 ## Provenance
 

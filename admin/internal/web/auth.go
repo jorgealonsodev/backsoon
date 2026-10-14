@@ -71,11 +71,11 @@ func (s *Server) validLoginToken(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(nonce), []byte(field)) == 1
 }
 
-func (s *Server) renderLogin(w http.ResponseWriter, status int, user, message string) {
+func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, user, message string) {
 	cookie, token := s.newLoginToken()
 	http.SetCookie(w, cookie)
-	s.render(w, status, "login", &loginView{
-		base: base{Title: "Sign in · backsoon"}, User: user, Token: token, Error: message,
+	s.render(w, r, status, "login", &loginView{
+		base: base{Title: localeOf(r).T("title.login") + " · backsoon"}, User: user, Token: token, Error: message,
 	})
 }
 
@@ -84,29 +84,30 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.renderLogin(w, http.StatusOK, "", "")
+	s.renderLogin(w, r, http.StatusOK, "", "")
 }
 
 func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
-	const expired = "The sign-in form expired. Try again."
+	loc := localeOf(r)
+	expired := loc.T("login.err.expired")
 	switch r.Header.Get("Sec-Fetch-Site") {
 	case "", "same-origin", "none":
 	default:
-		s.renderLogin(w, http.StatusForbidden, "", expired)
+		s.renderLogin(w, r, http.StatusForbidden, "", expired)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, loginBodyMax)
 	if err := r.ParseForm(); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			s.renderLogin(w, http.StatusRequestEntityTooLarge, "", "That request was too large. Enter only your user and password.")
+			s.renderLogin(w, r, http.StatusRequestEntityTooLarge, "", loc.T("login.err.toolarge"))
 			return
 		}
-		s.renderLogin(w, http.StatusBadRequest, "", "That request could not be read. Try again.")
+		s.renderLogin(w, r, http.StatusBadRequest, "", loc.T("request.unreadable"))
 		return
 	}
 	if !s.validLoginToken(r) {
-		s.renderLogin(w, http.StatusForbidden, "", expired)
+		s.renderLogin(w, r, http.StatusForbidden, "", expired)
 		return
 	}
 
@@ -116,13 +117,12 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if !allowed {
 		s.log.Printf("login blocked ip=%s retry_in=%s", ip, wait.Round(time.Second))
 		w.Header().Set("Retry-After", fmt.Sprint(int(wait.Seconds()+0.999)))
-		s.renderLogin(w, http.StatusTooManyRequests, user,
-			"Too many sign-in attempts. Try again in "+waitText(wait)+".")
+		s.renderLogin(w, r, http.StatusTooManyRequests, user, loc.T("login.err.throttled", waitText(loc, wait)))
 		return
 	}
 	if !s.creds.Check(user, r.PostFormValue("password")) {
 		s.log.Printf("login failed ip=%s", ip)
-		s.renderLogin(w, http.StatusUnauthorized, user, "Wrong user or password.")
+		s.renderLogin(w, r, http.StatusUnauthorized, user, loc.T("login.err.wrong"))
 		return
 	}
 
@@ -130,7 +130,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	_, cookie, err := s.sessions.Issue()
 	if err != nil {
 		s.log.Printf("login failed to issue a session: %v", err)
-		s.renderLogin(w, http.StatusInternalServerError, user, "Something went wrong. Try again.")
+		s.renderLogin(w, r, http.StatusInternalServerError, user, loc.T("login.err.session"))
 		return
 	}
 	http.SetCookie(w, cookie)
@@ -143,7 +143,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess auth.Session) {
 	r.Body = http.MaxBytesReader(w, r.Body, loginBodyMax)
 	if err := r.ParseForm(); err != nil || !s.validCSRF(sess, r) {
-		s.csrfFailed(w, sess)
+		s.csrfFailed(w, r, sess)
 		return
 	}
 	s.sessions.Revoke(sess)
@@ -154,15 +154,15 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 }
 
 // waitText rounds the wait up to whole minutes ("1 minute", "15 minutes").
-func waitText(d time.Duration) string {
+func waitText(loc locale, d time.Duration) string {
 	minutes := int((d + time.Minute - 1) / time.Minute)
 	if minutes < 1 {
 		minutes = 1
 	}
 	if minutes == 1 {
-		return "1 minute"
+		return loc.T("wait.one")
 	}
-	return fmt.Sprintf("%d minutes", minutes)
+	return loc.T("wait.many", minutes)
 }
 
 // clientIP is the key of the login limiter: the address of the connection's peer, unless that

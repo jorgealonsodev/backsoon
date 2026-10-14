@@ -82,6 +82,8 @@ The provisional `default.html` is rendered from `templates/maintenance.html` by 
 
 `backsoon-admin` manages the pages: create one from the template or upload a self-contained `.html` (UTF-8, at most 512 KB), assign it to domains and `service:port` destinations, preview it in a sandbox, replace or delete it. Every change is published atomically to the `backsoon_pages` volume and is served on the next request, with no restart. The panel answers the question "which page does this destination show?" in the same order `backsoon` uses.
 
+The panel is available in English and Spanish. It picks the language from the `backsoon_lang` cookie if present, otherwise from the browser's `Accept-Language` header (for example `es-ES` selects Spanish), otherwise English. The **ES / EN** switch in the navbar, and on the sign-in page, changes it without JavaScript and remembers the choice in the `backsoon_lang` cookie for about a year (`HttpOnly`, `Secure`, `SameSite=Strict`). Only the panel is translated: its log stays in English, and the maintenance page that visitors see keeps the language you give it.
+
 1. **Create the password hash.** Use bcrypt cost 12 (the `htpasswd` default, 5, is too weak for an internet-facing login):
 
    ```sh

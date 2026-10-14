@@ -17,11 +17,9 @@ const (
 	smallBodyMax    = 16 << 10
 )
 
-// fieldOrder is the order of the error summary; anchors are the ids of the controls.
-var fieldOrder = []struct{ field, label string }{
-	{"name", "Page name"}, {"destinations", "Destinations"}, {"file", "HTML file"},
-	{"app_name", "Application name"}, {"message", "Message"}, {"lang", "Language"}, {"icon", "Icon"},
-}
+// fieldOrder is the order of the error summary; anchors are the ids of the controls, and the
+// labels are catalogue keys ("field.<id>").
+var fieldOrder = []string{"name", "destinations", "file", "app_name", "message", "lang", "icon"}
 
 func defaultForm() formValues {
 	return formValues{Source: "template", Lang: pages.DefaultLang, Message: pages.DefaultParams(0).Message}
@@ -38,17 +36,17 @@ func formOf(site pages.Site) formValues {
 	return f
 }
 
-func (s *Server) newFormView(sess auth.Session, form formValues) *formView {
+func (s *Server) newFormView(loc locale, sess auth.Session, form formValues) *formView {
 	return &formView{
-		base: s.base(sess, "New page"), Action: "/pages", Form: form, Errs: map[string][]issue{},
+		base: s.base(sess, loc.T("title.new")), Action: "/pages", Form: form, Errs: map[string][]issue{},
 	}
 }
 
-func (s *Server) editFormView(sess auth.Session, site pages.Site, form formValues) *formView {
+func (s *Server) editFormView(loc locale, sess auth.Session, site pages.Site, form formValues) *formView {
 	iso, text := dateParts(site.UpdatedAt)
 	isDefault := site.ID == pages.DefaultID
 	return &formView{
-		base: s.base(sess, "Edit "+site.Name), Edit: true, IsDefault: isDefault,
+		base: s.base(sess, loc.T("title.edit", site.Name)), Edit: true, IsDefault: isDefault,
 		Action: "/pages/" + site.ID, PageID: site.ID, PageName: site.Name,
 		UpdatedISO: iso, UpdatedText: text, NoDests: !isDefault && len(site.Targets) == 0,
 		Form: form, Errs: map[string][]issue{}, PreviewSrc: "/pages/" + site.ID + "/preview",
@@ -57,15 +55,15 @@ func (s *Server) editFormView(sess auth.Session, site pages.Site, form formValue
 }
 
 // summarize builds the error summary from the field issues.
-func (v *formView) summarize() {
+func (v *formView) summarize(loc locale) {
 	v.Summary = nil
-	for _, f := range fieldOrder {
-		if issues := v.Errs[f.field]; len(issues) > 0 {
+	for _, field := range fieldOrder {
+		if issues := v.Errs[field]; len(issues) > 0 {
 			text := issues[0].Text
 			if len(issues) > 1 {
-				text = fmt.Sprintf("%d problems", len(issues))
+				text = loc.T("form.problems", len(issues))
 			}
-			v.Summary = append(v.Summary, summaryItem{Anchor: f.field, Text: f.label + ": " + text})
+			v.Summary = append(v.Summary, summaryItem{Anchor: field, Text: loc.T("field."+field) + ": " + text})
 		}
 	}
 }
@@ -81,12 +79,12 @@ func kbText(n int) string { return fmt.Sprintf("%d KB", (n+1023)/1024) }
 
 func (s *Server) newPage(w http.ResponseWriter, r *http.Request, sess auth.Session) {
 	form := defaultForm()
-	v := s.newFormView(sess, form)
+	v := s.newFormView(localeOf(r), sess, form)
 	if d, ok := s.drafts.load(r.URL.Query().Get("draft"), sess.ID); ok && d.pageID == "" {
 		v.Form = d.form
 		v.keep(d, d.id)
 	}
-	s.render(w, http.StatusOK, "form", v)
+	s.render(w, r, http.StatusOK, "form", v)
 }
 
 func (s *Server) editPage(w http.ResponseWriter, r *http.Request, sess auth.Session) {
@@ -95,12 +93,12 @@ func (s *Server) editPage(w http.ResponseWriter, r *http.Request, sess auth.Sess
 		s.notFound(w, r, sess)
 		return
 	}
-	v := s.editFormView(sess, site, formOf(site))
+	v := s.editFormView(localeOf(r), sess, site, formOf(site))
 	if d, ok := s.drafts.load(r.URL.Query().Get("draft"), sess.ID); ok && d.pageID == site.ID {
 		v.Form = d.form
 		v.keep(d, d.id)
 	}
-	s.render(w, http.StatusOK, "form", v)
+	s.render(w, r, http.StatusOK, "form", v)
 }
 
 func (s *Server) createPage(w http.ResponseWriter, r *http.Request, sess auth.Session) {
@@ -150,50 +148,66 @@ func hasHTMLExt(name string) bool {
 	return strings.HasSuffix(n, ".html") || strings.HasSuffix(n, ".htm")
 }
 
-const (
-	msgTooLarge = "The file is larger than 512 KB. Remove embedded images or unused CSS, or split the page, and upload it again."
-	msgNotUTF8  = "The file is not valid UTF-8. Save the file as UTF-8 (most editors offer this under Save As or Encoding) and upload it again."
-	msgEmpty    = "The file is empty. Choose a .html file that has content."
-	msgExpired  = "Your pending upload expired (pending uploads are kept for 15 minutes). Upload the file again."
-)
-
 // contentIssue maps a pages content error to its message and status.
-func contentIssue(err error) (text string, status int, ok bool) {
+func contentIssue(loc locale, err error) (text string, status int, ok bool) {
 	switch {
 	case errors.Is(err, pages.ErrTooLarge):
-		return msgTooLarge, http.StatusRequestEntityTooLarge, true
+		return loc.T("val.toolarge"), http.StatusRequestEntityTooLarge, true
 	case errors.Is(err, pages.ErrNotUTF8):
-		return msgNotUTF8, http.StatusUnprocessableEntity, true
+		return loc.T("val.notutf8"), http.StatusUnprocessableEntity, true
 	case errors.Is(err, pages.ErrEmptyHTML):
-		return msgEmpty, http.StatusUnprocessableEntity, true
+		return loc.T("val.empty"), http.StatusUnprocessableEntity, true
 	}
 	return "", 0, false
 }
 
-// afterColon drops the sentinel prefix of errors like "invalid page name: the name is required".
-func afterColon(err error) string {
-	if _, rest, ok := strings.Cut(err.Error(), ": "); ok {
-		return strings.ToUpper(rest[:1]) + rest[1:]
+// nameIssue is the message of a refused page name.
+func nameIssue(loc locale, err error) string {
+	var ne *pages.NameError
+	if errors.As(err, &ne) {
+		switch ne.Problem {
+		case pages.NameRequired:
+			return loc.T("name.required")
+		case pages.NameInvalidText:
+			return loc.T("name.text", ne.Max)
+		case pages.NameControl:
+			return loc.T("name.control")
+		}
 	}
 	return err.Error()
 }
 
-func templateField(msg string) string {
-	low := strings.ToLower(msg)
-	switch {
-	case strings.HasPrefix(low, "the message"):
-		return "message"
-	case strings.HasPrefix(low, "the icon"):
-		return "icon"
-	case strings.HasPrefix(low, "language"):
-		return "lang"
+// paramIssue maps a template validation error to the form field it belongs to and its message.
+func paramIssue(loc locale, err error) (field, text string) {
+	var pe *pages.ParamError
+	if !errors.As(err, &pe) {
+		return "app_name", err.Error()
 	}
-	return "app_name"
+	switch pe.Problem {
+	case pages.ParamBadLang:
+		return "lang", loc.T("param.lang.bad")
+	case pages.ParamBadRefresh: // not a form field; the panel never sends one
+		return "app_name", loc.T("param.refresh.bad")
+	case pages.ParamRequired:
+		return pe.Field, loc.T("param." + pe.Field + ".required")
+	case pages.ParamControl:
+		return pe.Field, loc.T("param." + pe.Field + ".control")
+	}
+	return pe.Field, loc.T("param."+pe.Field+".text", pe.Max)
+}
+
+// warningText is the message of a content warning.
+func warningText(loc locale, w pages.Warning) string {
+	if w.Code == pages.WarningExternalResources {
+		return loc.T("warn.external", strings.Join(w.Detail, ", "))
+	}
+	return loc.T("warn.script")
 }
 
 // submit handles POST /pages (id == "") and POST /pages/{id}: validation, the confirmation steps
 // (content warnings, destination moves) and the store call.
 func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Session, id string) {
+	loc := localeOf(r)
 	edit := id != ""
 	r.Body = http.MaxBytesReader(w, r.Body, s.uploadBodyMax)
 	parseErr := r.ParseMultipartForm(1 << 20)
@@ -206,7 +220,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		var err error
 		if site, err = s.store.Get(id); err != nil {
 			if parseErr == nil && !s.validCSRF(sess, r) {
-				s.csrfFailed(w, sess)
+				s.csrfFailed(w, r, sess)
 				return
 			}
 			s.notFound(w, r, sess)
@@ -215,9 +229,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 	}
 	formViewFor := func(form formValues) *formView {
 		if edit {
-			return s.editFormView(sess, site, form)
+			return s.editFormView(loc, sess, site, form)
 		}
-		return s.newFormView(sess, form)
+		return s.newFormView(loc, sess, form)
 	}
 	blank := defaultForm()
 	if edit {
@@ -228,17 +242,17 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		var tooBig *http.MaxBytesError
 		v := formViewFor(blank)
 		status := http.StatusBadRequest
-		text := "That request could not be read. Try again."
+		text := loc.T("request.unreadable")
 		if errors.As(parseErr, &tooBig) {
-			status, text = http.StatusRequestEntityTooLarge, msgTooLarge
+			status, text = http.StatusRequestEntityTooLarge, loc.T("val.toolarge")
 		}
 		v.Errs["file"] = []issue{{Text: text}}
-		v.summarize()
-		s.render(w, status, "form", v)
+		v.summarize(loc)
+		s.render(w, r, status, "form", v)
 		return
 	}
 	if !s.validCSRF(sess, r) {
-		s.csrfFailed(w, sess)
+		s.csrfFailed(w, r, sess)
 		return
 	}
 
@@ -264,9 +278,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 			form = blank
 		}
 		v := formViewFor(form)
-		v.Errs["file"] = []issue{{Text: msgExpired}}
-		v.summarize()
-		s.render(w, http.StatusGone, "form", v)
+		v.Errs["file"] = []issue{{Text: loc.T("val.expired")}}
+		v.summarize(loc)
+		s.render(w, r, http.StatusGone, "form", v)
 		return
 	}
 
@@ -296,7 +310,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		}
 		file, err := readUpload(r)
 		if err != nil {
-			addIssue("file", "", "The file could not be read. Choose it again.")
+			addIssue("file", "", loc.T("val.file.unread"))
 		}
 		source := form.Source
 		if !edit {
@@ -311,12 +325,12 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		if file != nil && (edit || source == "upload") {
 			switch {
 			case !hasHTMLExt(file.name):
-				addIssue("file", "", "Only .html files can be uploaded. Rename the file, or export the page as HTML.")
+				addIssue("file", "", loc.T("val.file.ext"))
 			default:
-				if _, err := pages.ValidateHTML(file.data); err != nil {
-					text, st, ok := contentIssue(err)
+				if _, err := pages.Inspect(file.data); err != nil {
+					text, st, ok := contentIssue(loc, err)
 					if !ok {
-						text, st = msgEmpty, http.StatusUnprocessableEntity
+						text, st = loc.T("val.empty"), http.StatusUnprocessableEntity
 					}
 					addIssue("file", "", text)
 					status = st
@@ -328,7 +342,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 			html, fileName = dr.html, dr.fileName
 		}
 		if !edit && source == "upload" && html == nil && len(errs["file"]) == 0 {
-			addIssue("file", "", "Choose a .html file to upload.")
+			addIssue("file", "", loc.T("val.file.choose"))
 		}
 		if !edit && source == "template" {
 			out, err := s.store.Render(pages.TemplateParams{AppName: form.AppName, Message: form.Message, Lang: form.Lang, Icon: form.Icon})
@@ -336,17 +350,17 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 			case err == nil:
 				html, fileName = out, ""
 			case errors.Is(err, pages.ErrInvalidTemplateParams):
-				msg := afterColon(err)
-				addIssue(templateField(msg), "", msg)
+				field, msg := paramIssue(loc, err)
+				addIssue(field, "", msg)
 			default:
-				s.internalError(w, sess, "render template", err)
+				s.internalError(w, r, sess, "render template", err)
 				return
 			}
 		}
 	}
 
 	if strings.TrimSpace(form.Name) == "" {
-		addIssue("name", "", "The name is required. It is only shown in this panel.")
+		addIssue("name", "", loc.T("val.name.required"))
 	}
 
 	var targets []string
@@ -354,18 +368,17 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 	switch {
 	case id == pages.DefaultID:
 		if len(entries) > 0 {
-			s.errorPage(w, sess, http.StatusConflict, "The default page has no destinations",
-				"The default page is shown for everything else, so it cannot be assigned destinations. Rename it or replace its HTML instead.",
-				"/pages/"+id, "Back to the page")
+			s.errorPage(w, r, sess, http.StatusConflict, loc.T("err.defdests.title"), loc.T("err.defdests.body"),
+				"/pages/"+id, loc.T("back.page"))
 			return
 		}
 	case len(entries) > maxDestinations:
-		addIssue("destinations", "", fmt.Sprintf("Too many destinations (at most %d per page).", maxDestinations))
+		addIssue("destinations", "", loc.T("val.dest.toomany", maxDestinations))
 	default:
 		for _, e := range entries {
 			t, err := pages.ParseTarget(e)
 			if err != nil {
-				addIssue("destinations", e, reasonOf(err))
+				addIssue("destinations", e, reasonOf(loc, err))
 				continue
 			}
 			targets = append(targets, t.Value)
@@ -373,9 +386,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		if len(entries) == 0 {
 			switch {
 			case !edit:
-				addIssue("destinations", "", "Add at least one destination, such as app.example.com or app:8080.")
+				addIssue("destinations", "", loc.T("val.dest.atleast"))
 			case len(site.Targets) > 0:
-				addIssue("destinations", "", "Add at least one destination, or delete the page.")
+				addIssue("destinations", "", loc.T("val.dest.atleast.del"))
 			}
 		}
 	}
@@ -391,14 +404,14 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 	failForm := func() {
 		v := formViewFor(form)
 		v.Errs = errs
-		v.summarize()
+		v.summarize(loc)
 		if html != nil && fileName != "" { // keep an upload so it need not be chosen again
 			did := stash(false, false)
 			if d, ok := s.drafts.load(did, sess.ID); ok {
 				v.keep(d, did)
 			}
 		}
-		s.render(w, status, "form", v)
+		s.render(w, r, status, "form", v)
 	}
 	if len(errs) > 0 {
 		failForm()
@@ -407,14 +420,17 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 
 	var warnings []string
 	if html != nil {
-		warnings, _ = pages.ValidateHTML(html)
+		found, _ := pages.Inspect(html)
+		for _, wn := range found {
+			warnings = append(warnings, warningText(loc, wn))
+		}
 	}
 	if len(warnings) > 0 && !warningsOK {
 		did := stash(false, moveOK)
-		s.render(w, http.StatusOK, "confirm", &confirmView{
-			base: s.base(sess, "Check this page"), Kind: "warnings", Action: formAction(id), DraftID: did,
+		s.render(w, r, http.StatusOK, "confirm", &confirmView{
+			base: s.base(sess, loc.T("title.check")), Kind: "warnings", Action: formAction(id), DraftID: did,
 			PageName: strings.TrimSpace(form.Name), Edit: edit, Warnings: warnings,
-			Dests: destsFromValues(targets), BackHref: backHref(id, did),
+			Dests: destsFromValues(loc, targets), BackHref: backHref(id, did),
 		})
 		return
 	}
@@ -440,34 +456,33 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		s.log.Printf("publish failed id=%s: %v", saved.ID, pubErr.Err)
 	case errors.As(err, &conflict):
 		did := stash(true, false)
-		s.render(w, http.StatusConflict, "confirm", &confirmView{
-			base: s.base(sess, "Move destinations?"), Kind: "move", Action: formAction(id), DraftID: did,
-			PageName: name, Edit: edit, Groups: s.moveGroups(conflict, id), BackHref: backHref(id, did),
+		s.render(w, r, http.StatusConflict, "confirm", &confirmView{
+			base: s.base(sess, loc.T("title.move")), Kind: "move", Action: formAction(id), DraftID: did,
+			PageName: name, Edit: edit, Groups: s.moveGroups(loc, conflict, id), BackHref: backHref(id, did),
 		})
 		return
 	case errors.Is(err, pages.ErrNotFound):
 		s.notFound(w, r, sess)
 		return
 	case errors.Is(err, pages.ErrDefaultImmutable):
-		s.errorPage(w, sess, http.StatusConflict, "The default page has no destinations",
-			"The default page is shown for everything else, so it cannot be assigned destinations.", "/pages/"+id, "Back to the page")
+		s.errorPage(w, r, sess, http.StatusConflict, loc.T("err.defdests.title"), loc.T("err.defdests.short"), "/pages/"+id, loc.T("back.page"))
 		return
 	case errors.Is(err, pages.ErrInvalidName):
-		addIssue("name", "", afterColon(err))
+		addIssue("name", "", nameIssue(loc, err))
 		failForm()
 		return
 	case errors.Is(err, pages.ErrNoTargets):
-		addIssue("destinations", "", "Add at least one destination, or delete the page.")
+		addIssue("destinations", "", loc.T("val.dest.atleast.del"))
 		failForm()
 		return
 	default:
-		if text, st, ok := contentIssue(err); ok {
+		if text, st, ok := contentIssue(loc, err); ok {
 			addIssue("file", "", text)
 			status = st
 			failForm()
 			return
 		}
-		s.internalError(w, sess, "save page", err)
+		s.internalError(w, r, sess, "save page", err)
 		return
 	}
 
@@ -503,11 +518,11 @@ func backHref(id, draftID string) string {
 	return "/pages/" + id + "?draft=" + draftID
 }
 
-func destsFromValues(values []string) []destView {
+func destsFromValues(loc locale, values []string) []destView {
 	out := make([]destView, 0, len(values))
 	for _, v := range values {
 		if t, err := pages.ParseTarget(v); err == nil {
-			kind, isService := kindOf(t)
+			kind, isService := kindOf(loc, t)
 			out = append(out, destView{Value: t.Value, Kind: kind, IsService: isService})
 		}
 	}
@@ -516,7 +531,7 @@ func destsFromValues(values []string) []destView {
 
 // moveGroups groups the conflicting destinations by their current owner and flags owners that
 // would be left with nothing.
-func (s *Server) moveGroups(c *pages.ConflictError, newOwnerID string) []moveGroup {
+func (s *Server) moveGroups(loc locale, c *pages.ConflictError, newOwnerID string) []moveGroup {
 	var groups []moveGroup
 	index := map[string]int{}
 	moved := map[string]map[pages.Target]bool{}
@@ -528,7 +543,7 @@ func (s *Server) moveGroups(c *pages.ConflictError, newOwnerID string) []moveGro
 			groups = append(groups, moveGroup{OwnerName: conf.OwnerName, OwnerID: conf.OwnerID})
 			moved[conf.OwnerID] = map[pages.Target]bool{}
 		}
-		kind, isService := kindOf(conf.Target)
+		kind, isService := kindOf(loc, conf.Target)
 		groups[i].Dests = append(groups[i].Dests, destView{Value: conf.Target.Value, Kind: kind, IsService: isService})
 		moved[conf.OwnerID][conf.Target] = true
 	}
@@ -552,7 +567,7 @@ func (s *Server) deletePage(w http.ResponseWriter, r *http.Request, sess auth.Se
 	id := r.PathValue("id")
 	r.Body = http.MaxBytesReader(w, r.Body, smallBodyMax)
 	if err := r.ParseForm(); err != nil || !s.validCSRF(sess, r) {
-		s.csrfFailed(w, sess)
+		s.csrfFailed(w, r, sess)
 		return
 	}
 	site, err := s.store.Get(id)
@@ -561,9 +576,9 @@ func (s *Server) deletePage(w http.ResponseWriter, r *http.Request, sess auth.Se
 		return
 	}
 	if id == pages.DefaultID {
-		s.errorPage(w, sess, http.StatusConflict, "The default page cannot be deleted",
-			"The default page is what visitors see when no other page matches. You can rename it or replace its HTML instead.",
-			"/pages/"+id, "Back to the page")
+		loc := localeOf(r)
+		s.errorPage(w, r, sess, http.StatusConflict, loc.T("err.defdelete.title"), loc.T("err.defdelete.body"),
+			"/pages/"+id, loc.T("back.page"))
 		return
 	}
 	dests := make([]string, 0, len(site.Targets))
@@ -575,9 +590,10 @@ func (s *Server) deletePage(w http.ResponseWriter, r *http.Request, sess auth.Se
 		if d, err := s.store.Get(pages.DefaultID); err == nil {
 			defaultName = d.Name
 		}
-		s.render(w, http.StatusOK, "confirm", &confirmView{
-			base: s.base(sess, "Delete "+site.Name), Kind: "delete", Action: "/pages/" + id + "/delete",
-			PageName: site.Name, Dests: destsOf(site.Targets, pages.Target{}, false),
+		loc := localeOf(r)
+		s.render(w, r, http.StatusOK, "confirm", &confirmView{
+			base: s.base(sess, loc.T("title.delete", site.Name)), Kind: "delete", Action: "/pages/" + id + "/delete",
+			PageName: site.Name, Dests: destsOf(loc, site.Targets, pages.Target{}, false),
 			BackHref: "/pages/" + id, DefaultName: defaultName,
 		})
 		return
@@ -594,7 +610,7 @@ func (s *Server) deletePage(w http.ResponseWriter, r *http.Request, sess auth.Se
 		s.notFound(w, r, sess)
 		return
 	default:
-		s.internalError(w, sess, "delete page", err)
+		s.internalError(w, r, sess, "delete page", err)
 		return
 	}
 	s.log.Printf("page deleted id=%s name=%q destinations=%v", id, site.Name, dests)

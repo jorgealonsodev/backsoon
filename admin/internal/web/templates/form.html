@@ -1,10 +1,10 @@
-{{define "kept"}}{{with .Kept}}<p class="hint kept">Using the file you already uploaded: <strong>{{.Name}}</strong> ({{.Size}}). Choose another file only to replace it.</p>{{end}}{{end}}
+{{define "kept"}}{{with .Kept}}<p class="hint kept">{{t "form.kept.a"}} <strong>{{.Name}}</strong> ({{.Size}}). {{t "form.kept.b"}}</p>{{end}}{{end}}
 
 {{define "form"}}{{template "top" .}}
 <main id="main" class="container container-narrow" data-view="{{if .Edit}}edit{{else}}new{{end}}">
-<p class="crumb"><a href="/">{{template "icon" "back"}}Back to the directory</a></p>
+<p class="crumb"><a href="/">{{template "icon" "back"}}{{t "back.dir"}}</a></p>
 {{- if .Summary}}
-<div class="alert alert-danger" role="alert">{{template "icon" "alert"}}<div><p class="alert-title">Fix these before saving</p>
+<div class="alert alert-danger" role="alert">{{template "icon" "alert"}}<div><p class="alert-title">{{t "form.summary"}}</p>
 <ul class="summary">
 {{- range .Summary}}
 <li><a href="#{{.Anchor}}">{{.Text}}</a></li>
@@ -17,38 +17,38 @@
 {{- if .Edit}}
 <div>
 <h1 class="card-title">{{.PageName}}</h1>
-<p class="sub">Updated <time datetime="{{.UpdatedISO}}">{{.UpdatedText}}</time></p>
+<p class="sub">{{t "dir.updated"}} <time datetime="{{.UpdatedISO}}">{{.UpdatedText}}</time></p>
 </div>
 {{- else}}
 <div>
-<h1 class="card-title">New page</h1>
-<p class="sub">Upload a self-contained .html file or fill in the template, then choose the destinations that show it.</p>
+<h1 class="card-title">{{t "title.new"}}</h1>
+<p class="sub">{{t "form.new.sub"}}</p>
 </div>
 {{- end}}
 </div>
 <div class="card-body stack">
 {{- if .Edit}}{{if .IsDefault}}
-<div class="alert alert-info">{{template "icon" "info"}}<div>This page is shown for <strong>Everything else</strong>: any destination without a page of its own. It has no destinations and cannot be deleted. You can rename it or replace its HTML.</div></div>
+<div class="alert alert-info">{{template "icon" "info"}}<div>{{t "form.default.a"}}<strong>{{t "dir.else"}}</strong>{{t "form.default.b"}}</div></div>
 {{- end}}{{if .NoDests}}
-<div class="alert alert-warning">{{template "icon" "warn"}}<div>No destinations — visitors never see this page. Add a destination below to publish it.</div></div>
+<div class="alert alert-warning">{{template "icon" "warn"}}<div>{{t "form.nodests"}}</div></div>
 {{- end}}{{end}}
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 {{- if .DraftID}}
 <input type="hidden" name="draft" value="{{.DraftID}}">
 {{- end}}
 <div class="field">
-<label for="name">Page name</label>
+<label for="name">{{t "field.name"}}</label>
 <input type="text" id="name" name="name" value="{{.Form.Name}}" autocomplete="off" {{.Describe "name" true}}>
-<p class="hint" id="name-hint">Shown in this panel only, for example “Acme maintenance”.</p>
+<p class="hint" id="name-hint">{{t "hint.name"}}</p>
 {{- with .Issues "name"}}
 <ul class="err-list" id="name-error">{{template "issues" .}}</ul>
 {{- end}}
 </div>
 {{- if not .IsDefault}}
 <div class="field">
-<label for="destinations">Destinations</label>
+<label for="destinations">{{t "field.destinations"}}</label>
 <textarea id="destinations" name="destinations" rows="4" class="mono-field" autocapitalize="none" spellcheck="false" {{.Describe "destinations" true}}>{{.Form.Destinations}}</textarea>
-<p class="hint" id="destinations-hint">One per line, or separated by commas. A domain such as app.example.com, or a service:port such as app:8080. Each destination shows one page; assigning one that is taken asks you first.</p>
+<p class="hint" id="destinations-hint">{{t "hint.destinations"}}</p>
 {{- with .Issues "destinations"}}
 <ul class="err-list" id="destinations-error">{{template "issues" .}}</ul>
 {{- end}}
@@ -56,10 +56,10 @@
 {{- end}}
 {{- if .Edit}}
 <div class="field">
-<label for="file">Replace the HTML</label>
+<label for="file">{{t "form.replace"}}</label>
 {{template "kept" .}}
 <input type="file" id="file" name="file" accept=".html,.htm,text/html" {{.Describe "file" true}}>
-<p class="hint" id="file-hint">Optional. Leave empty to keep the current page. One .html file, UTF-8, at most 512 KB.</p>
+<p class="hint" id="file-hint">{{t "hint.replace"}}</p>
 {{- with .Issues "file"}}
 <ul class="err-list" id="file-error">{{template "issues" .}}</ul>
 {{- end}}
@@ -67,43 +67,43 @@
 {{- else}}
 <div class="source stack">
 <fieldset class="field">
-<legend>Start from</legend>
+<legend>{{t "form.source"}}</legend>
 <div class="choices">
-<label class="choice" for="source-template"><input type="radio" id="source-template" name="source" value="template"{{if ne .Form.Source "upload"}} checked{{end}}><span>The template<small>Fill in a name, a message and a language.</small></span></label>
-<label class="choice" for="source-upload"><input type="radio" id="source-upload" name="source" value="upload"{{if eq .Form.Source "upload"}} checked{{end}}><span>An uploaded .html file<small>Your own self-contained page.</small></span></label>
+<label class="choice" for="source-template"><input type="radio" id="source-template" name="source" value="template"{{if ne .Form.Source "upload"}} checked{{end}}><span>{{t "form.source.tpl"}}<small>{{t "form.source.tpl.sub"}}</small></span></label>
+<label class="choice" for="source-upload"><input type="radio" id="source-upload" name="source" value="upload"{{if eq .Form.Source "upload"}} checked{{end}}><span>{{t "form.source.up"}}<small>{{t "form.source.up.sub"}}</small></span></label>
 </div>
 </fieldset>
 <div class="stack src-template">
 <div class="field">
-<label for="app_name">Application name</label>
+<label for="app_name">{{t "field.app_name"}}</label>
 <input type="text" id="app_name" name="app_name" value="{{.Form.AppName}}" autocomplete="off" {{.Describe "app_name" true}}>
-<p class="hint" id="app_name-hint">Shown on the page, for example “Acme”.</p>
+<p class="hint" id="app_name-hint">{{t "hint.app_name"}}</p>
 {{- with .Issues "app_name"}}
 <ul class="err-list" id="app_name-error">{{template "issues" .}}</ul>
 {{- end}}
 </div>
 <div class="field">
-<label for="message">Message</label>
+<label for="message">{{t "field.message"}}</label>
 <textarea id="message" name="message" rows="3" {{.Describe "message" true}}>{{.Form.Message}}</textarea>
-<p class="hint" id="message-hint">The explanatory line visitors read. The template's own text is Spanish.</p>
+<p class="hint" id="message-hint">{{t "hint.message"}}</p>
 {{- with .Issues "message"}}
 <ul class="err-list" id="message-error">{{template "issues" .}}</ul>
 {{- end}}
 </div>
 <div class="field-row">
 <div class="field">
-<label for="lang">Language</label>
+<label for="lang">{{t "field.lang"}}</label>
 <input type="text" id="lang" name="lang" value="{{.Form.Lang}}" list="lang-options" autocomplete="off" autocapitalize="none" spellcheck="false" {{.Describe "lang" true}}>
 <datalist id="lang-options"><option value="es"></option><option value="en"></option><option value="pt"></option><option value="fr"></option><option value="de"></option><option value="it"></option><option value="ca"></option></datalist>
-<p class="hint" id="lang-hint">Sets the page's lang attribute, for example es or pt-BR.</p>
+<p class="hint" id="lang-hint">{{t "hint.lang"}}</p>
 {{- with .Issues "lang"}}
 <ul class="err-list" id="lang-error">{{template "issues" .}}</ul>
 {{- end}}
 </div>
 <div class="field">
-<label for="icon">Icon</label>
+<label for="icon">{{t "field.icon"}}</label>
 <input type="text" id="icon" name="icon" value="{{.Form.Icon}}" autocomplete="off" {{.Describe "icon" true}}>
-<p class="hint" id="icon-hint">Optional: one emoji or a few characters shown beside the name.</p>
+<p class="hint" id="icon-hint">{{t "hint.icon"}}</p>
 {{- with .Issues "icon"}}
 <ul class="err-list" id="icon-error">{{template "issues" .}}</ul>
 {{- end}}
@@ -112,10 +112,10 @@
 </div>
 <div class="stack src-upload">
 <div class="field">
-<label for="file">HTML file</label>
+<label for="file">{{t "field.file"}}</label>
 {{template "kept" .}}
 <input type="file" id="file" name="file" accept=".html,.htm,text/html" {{.Describe "file" true}}>
-<p class="hint" id="file-hint">One self-contained .html file, UTF-8, at most 512 KB. External resources and scripts ask for confirmation.</p>
+<p class="hint" id="file-hint">{{t "hint.file"}}</p>
 {{- with .Issues "file"}}
 <ul class="err-list" id="file-error">{{template "issues" .}}</ul>
 {{- end}}
@@ -125,25 +125,25 @@
 {{- end}}
 </div>
 <div class="card-footer actions">
-<button class="btn btn-primary" type="submit">{{if .Edit}}Save changes{{else}}Create page{{end}}</button>
-<a class="btn" href="/">Cancel</a>
+<button class="btn btn-primary" type="submit">{{if .Edit}}{{t "form.save"}}{{else}}{{t "form.create"}}{{end}}</button>
+<a class="btn" href="/">{{t "form.cancel"}}</a>
 </div>
 </form>
 {{- if .Edit}}
 <section class="card" aria-labelledby="preview-title">
-<div class="card-header"><h2 class="card-title" id="preview-title">Preview</h2><a class="btn btn-sm" href="{{.PreviewSrc}}" target="_blank" rel="noopener">{{template "icon" "external"}}Open full size</a></div>
+<div class="card-header"><h2 class="card-title" id="preview-title">{{t "form.preview"}}</h2><a class="btn btn-sm" href="{{.PreviewSrc}}" target="_blank" rel="noopener">{{template "icon" "external"}}{{t "form.open.full"}}</a></div>
 <div class="card-body">
-<iframe class="preview" src="{{.PreviewSrc}}" sandbox title="Preview of {{.PageName}}" referrerpolicy="no-referrer"></iframe>
+<iframe class="preview" src="{{.PreviewSrc}}" sandbox title="{{t "dir.preview.title" .PageName}}" referrerpolicy="no-referrer"></iframe>
 </div>
 </section>
 {{- if not .IsDefault}}
 <section class="card card-danger" aria-labelledby="delete-title">
-<div class="card-header"><h2 class="card-title" id="delete-title">Danger zone</h2></div>
+<div class="card-header"><h2 class="card-title" id="delete-title">{{t "form.danger"}}</h2></div>
 <div class="card-body">
 <form class="danger-row" method="post" action="{{.DeleteURL}}">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<div><p><strong>Delete this page</strong></p><p class="hint">Its destinations go back to the default page. You will be asked to confirm.</p></div>
-<button class="btn btn-danger-outline" type="submit">{{template "icon" "trash"}}Delete page</button>
+<div><p><strong>{{t "form.delete.this"}}</strong></p><p class="hint">{{t "form.delete.hint"}}</p></div>
+<button class="btn btn-danger-outline" type="submit">{{template "icon" "trash"}}{{t "form.delete.btn"}}</button>
 </form>
 </div>
 </section>

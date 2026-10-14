@@ -29,6 +29,41 @@ type Target struct {
 // ErrInvalidTarget is wrapped by every ParseTarget failure.
 var ErrInvalidTarget = errors.New("invalid target")
 
+// TargetProblem is the stable code of why ParseTarget refused a value.
+type TargetProblem string
+
+// The reasons a target is refused.
+const (
+	TargetEmpty      TargetProblem = "empty"
+	TargetBadDomain  TargetProblem = "bad-domain"
+	TargetBadService TargetProblem = "bad-service"
+	TargetBadPort    TargetProblem = "bad-port"
+	TargetPortRange  TargetProblem = "port-range"
+)
+
+// TargetError is the error ParseTarget returns: a code for the web layer to translate, and the
+// English text in Error. It wraps ErrInvalidTarget.
+type TargetError struct {
+	Problem TargetProblem
+	Raw     string
+}
+
+func (e *TargetError) Unwrap() error { return ErrInvalidTarget }
+
+func (e *TargetError) Error() string {
+	switch e.Problem {
+	case TargetEmpty:
+		return ErrInvalidTarget.Error() + ": empty value"
+	case TargetBadDomain:
+		return fmt.Sprintf("%v %q: a domain may contain only letters, digits, dots and hyphens (max 250 characters, starting with a letter or digit)", ErrInvalidTarget, e.Raw)
+	case TargetBadService:
+		return fmt.Sprintf("%v %q: the service name may contain only letters, digits, dots and hyphens (max 240 characters, starting with a letter or digit)", ErrInvalidTarget, e.Raw)
+	case TargetBadPort:
+		return fmt.Sprintf("%v %q: the port must be a number between 1 and 65535", ErrInvalidTarget, e.Raw)
+	}
+	return fmt.Sprintf("%v %q: the port must be between 1 and 65535", ErrInvalidTarget, e.Raw)
+}
+
 // These mirror the map blocks of nginx/default.conf.template, so any target the panel accepts is
 // one nginx can actually serve.
 var (
@@ -42,24 +77,24 @@ var (
 func ParseTarget(raw string) (Target, error) {
 	v := strings.ToLower(strings.TrimSpace(raw))
 	if v == "" {
-		return Target{}, fmt.Errorf("%w: empty value", ErrInvalidTarget)
+		return Target{}, &TargetError{Problem: TargetEmpty, Raw: raw}
 	}
 	name, port, hasPort := strings.Cut(v, ":")
 	if !hasPort {
 		if !hostRe.MatchString(v) {
-			return Target{}, fmt.Errorf("%w %q: a domain may contain only letters, digits, dots and hyphens (max 250 characters, starting with a letter or digit)", ErrInvalidTarget, raw)
+			return Target{}, &TargetError{Problem: TargetBadDomain, Raw: raw}
 		}
 		return Target{TargetHost, v}, nil
 	}
 	if !serviceRe.MatchString(name) {
-		return Target{}, fmt.Errorf("%w %q: the service name may contain only letters, digits, dots and hyphens (max 240 characters, starting with a letter or digit)", ErrInvalidTarget, raw)
+		return Target{}, &TargetError{Problem: TargetBadService, Raw: raw}
 	}
 	if !portRe.MatchString(port) {
-		return Target{}, fmt.Errorf("%w %q: the port must be a number between 1 and 65535", ErrInvalidTarget, raw)
+		return Target{}, &TargetError{Problem: TargetBadPort, Raw: raw}
 	}
 	n, _ := strconv.Atoi(port)
 	if n < 1 || n > 65535 {
-		return Target{}, fmt.Errorf("%w %q: the port must be between 1 and 65535", ErrInvalidTarget, raw)
+		return Target{}, &TargetError{Problem: TargetPortRange, Raw: raw}
 	}
 	return Target{TargetService, name + ":" + strconv.Itoa(n)}, nil
 }

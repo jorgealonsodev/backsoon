@@ -268,6 +268,51 @@ cred_case 'without BACKSOON_SESSION_SECRET' BACKSOON_SESSION_SECRET -e BACKSOON_
 cred_case 'with a 5-byte BACKSOON_SESSION_SECRET' BACKSOON_SESSION_SECRET -e BACKSOON_ADMIN_USER=admin -e BACKSOON_ADMIN_PASSWORD=pw-for-test -e BACKSOON_SESSION_SECRET=short
 cred_case 'with an invalid BACKSOON_TRUSTED_PROXIES' BACKSOON_TRUSTED_PROXIES -e BACKSOON_ADMIN_USER=admin -e BACKSOON_ADMIN_PASSWORD=pw-for-test -e "BACKSOON_SESSION_SECRET=$SECRET" -e BACKSOON_TRUSTED_PROXIES=not-a-range
 
+section 'language: Accept-Language, the ES/EN selector and its cookie (no session needed)'
+# html_lang: the lang attribute of the <html> element of the last BODY.
+html_lang() { printf '%s\n' "$BODY" | grep -o '<html lang="[^"]*"' | head -n 1 | sed 's/.*lang="//; s/"$//'; }
+anon /login
+expect_eq 'no language signal: the login is English' en "$(html_lang)"
+expect_eq 'a localized response varies on Accept-Language and Cookie' 'Accept-Language, Cookie' "$(header_value Vary)"
+anon /login -H 'Accept-Language: es-ES,es;q=0.9,en;q=0.8'
+expect_eq 'Accept-Language es through NPM: the login is Spanish' es "$(html_lang)"
+expect_has 'the Spanish login offers the switch to English' "$BODY" '/lang?to=en'
+anon /login -H 'Accept-Language: en-US,en;q=0.9,es;q=0.8'
+expect_eq 'Accept-Language en first: the login is English' en "$(html_lang)"
+anon /login -H 'Accept-Language: fr-FR,fr;q=0.9'
+expect_eq 'Accept-Language with no supported language: English' en "$(html_lang)"
+anon '/lang?to=en&next=%2Flogin' -H 'Accept-Language: es'
+expect_eq 'the selector answers without a session -> 303' 303 "$STATUS"
+expect_eq 'the selector returns to the page asked for' /login "$(header_value Location)"
+lang_line=$(set_cookie_line backsoon_lang)
+expect_has 'the selector sets backsoon_lang' "$lang_line" 'backsoon_lang=en'
+expect_has 'the language cookie is site-wide' "$lang_line" 'Path=/;'
+expect_has 'the language cookie is HttpOnly' "$lang_line" 'HttpOnly'
+expect_has 'the language cookie is Secure' "$lang_line" 'Secure'
+expect_has 'the language cookie is SameSite=Strict' "$lang_line" 'SameSite=Strict'
+lang_age=$(printf '%s\n' "$lang_line" | sed -n 's/.*Max-Age=\([0-9]*\).*/\1/p')
+case $lang_age in
+  ''|*[!0-9]*) ko 'the language cookie lasts about a year' "Max-Age [$lang_age]" ;;
+  *) if [ "$lang_age" -ge 31000000 ] && [ "$lang_age" -le 32000000 ]; then ok "the language cookie lasts about a year (Max-Age=$lang_age)"; else ko 'the language cookie lasts about a year' "Max-Age [$lang_age]"; fi ;;
+esac
+anon /login -H 'Accept-Language: es' -H 'Cookie: backsoon_lang=en'
+expect_eq 'the cookie beats Accept-Language (English)' en "$(html_lang)"
+anon '/lang?to=es&next=%2Flogin'
+expect_has 'the selector sets Spanish' "$(set_cookie_line backsoon_lang)" 'backsoon_lang=es'
+anon /login -H 'Cookie: backsoon_lang=es'
+expect_eq 'the cookie alone selects Spanish' es "$(html_lang)"
+anon /login -H 'Accept-Language: es' -H 'Cookie: backsoon_lang=fr'
+expect_eq 'an unsupported cookie value is ignored' es "$(html_lang)"
+for bad in '%2F%2Fevil.test' '%2F%5Cevil.test' 'https%3A%2F%2Fevil.test' ''; do
+  anon "/lang?to=es&next=$bad"
+  expect_eq "selector next=[$bad] returns to / (no open redirect)" / "$(header_value Location)"
+done
+anon '/lang?to=fr&next=%2Flogin'
+expect_eq 'an unknown language -> 303' 303 "$STATUS"
+expect_eq 'an unknown language sets no cookie' 0 "$(set_cookie_line backsoon_lang | wc -l | tr -d ' ')"
+anon /lang -X POST --data-urlencode to=es
+expect_eq 'POST /lang is not a selector route' 0 "$(set_cookie_line backsoon_lang | wc -l | tr -d ' ')"
+
 section 'login through the real form'
 anon /login
 expect_eq 'GET /login -> 200' 200 "$STATUS"
@@ -318,6 +363,10 @@ SESSION=$(set_cookie_value backsoon_session)
 COOKIE="backsoon_session=$SESSION"
 list
 expect_eq 'the directory renders for the session' 200 "$STATUS"
+panel / -H 'Accept: text/html' -H 'Accept-Language: es'
+expect_eq 'the signed-in directory follows Accept-Language: es' es "$(html_lang)"
+expect_has 'the navbar offers the switch to English' "$BODY" '/lang?to=en'
+list
 expect_eq 'rejected unauthenticated POSTs left only the default page' 1 "$(page_hrefs | wc -l | tr -d ' ')"
 expect_not_listed 'the rejected unauthenticated page is not listed' Ghost-e2e
 expect_listed 'the default page is listed' '/pages/default'

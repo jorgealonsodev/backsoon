@@ -5,34 +5,34 @@
 <div class="card">
 <div class="card-status" aria-hidden="true"></div>
 {{- if eq .Kind "warnings"}}
-<div class="card-header"><h1 class="card-title">Check this page before publishing</h1></div>
+<div class="card-header"><h1 class="card-title">{{t "confirm.warn.title"}}</h1></div>
 <div class="card-body stack">
-<p>“{{.PageName}}” {{if .Edit}}will get new HTML{{else}}is ready to be created{{end}}, with the warnings below. backsoon pages should be self-contained, so confirm that this is intended.</p>
+<p>{{if .Edit}}{{t "confirm.warn.intro.edit" .PageName}}{{else}}{{t "confirm.warn.intro.new" .PageName}}{{end}}</p>
 <div class="alert alert-warning">{{template "icon" "warn"}}<ul class="plain">
 {{- range .Warnings}}
-<li><strong>Warning.</strong> {{.}}</li>
+<li><strong>{{t "sr.warning"}}</strong> {{.}}</li>
 {{- end}}
 </ul></div>
 {{- if .Dests}}
-<div><p class="label">Destinations</p>{{template "dests" .Dests}}</div>
+<div><p class="label">{{t "field.destinations"}}</p>{{template "dests" .Dests}}</div>
 {{- end}}
 </div>
 <form class="card-footer actions" method="post" action="{{.Action}}">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="hidden" name="draft" value="{{.DraftID}}">
-<button class="btn btn-primary" type="submit" name="confirm" value="warnings">Publish anyway</button>
-<a class="btn" href="{{.BackHref}}">Back and edit</a>
+<button class="btn btn-primary" type="submit" name="confirm" value="warnings">{{t "confirm.warn.publish"}}</button>
+<a class="btn" href="{{.BackHref}}">{{t "confirm.back.edit"}}</a>
 </form>
 {{- else if eq .Kind "move"}}
-<div class="card-header"><h1 class="card-title">Move destinations?</h1></div>
+<div class="card-header"><h1 class="card-title">{{t "confirm.move.title"}}</h1></div>
 <div class="card-body stack">
-<p>Each destination shows one page. Moving these to “{{.PageName}}” takes them away from the page that shows them now.</p>
+<p>{{t "confirm.move.intro" .PageName}}</p>
 {{- range .Groups}}
 <div class="move-group">
 {{template "dests" .Dests}}
-<p class="sub">Now shown by “{{.OwnerName}}”.</p>
+<p class="sub">{{t "confirm.move.now" .OwnerName}}</p>
 {{- if .LeftEmpty}}
-<div class="alert alert-warning">{{template "icon" "warn"}}<div><strong>“{{.OwnerName}}” will be left with no destinations, so visitors will never see that page.</strong></div></div>
+<div class="alert alert-warning">{{template "icon" "warn"}}<div><strong>{{t "confirm.move.empty" .OwnerName}}</strong></div></div>
 {{- end}}
 </div>
 {{- end}}
@@ -40,25 +40,25 @@
 <form class="card-footer actions" method="post" action="{{.Action}}">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="hidden" name="draft" value="{{.DraftID}}">
-<button class="btn btn-primary" type="submit" name="confirm" value="move">Move destinations</button>
-<a class="btn" href="{{.BackHref}}">Back and edit</a>
+<button class="btn btn-primary" type="submit" name="confirm" value="move">{{t "confirm.move.btn"}}</button>
+<a class="btn" href="{{.BackHref}}">{{t "confirm.back.edit"}}</a>
 </form>
 {{- else}}
-<div class="card-header"><h1 class="card-title">Delete “{{.PageName}}”?</h1></div>
+<div class="card-header"><h1 class="card-title">{{t "confirm.delete.title" .PageName}}</h1></div>
 <div class="card-body stack">
 {{- if .Dests}}
-<p>These destinations will show the default page (“{{.DefaultName}}”) from the next request:</p>
+<p>{{t "confirm.delete.dests" .DefaultName}}</p>
 {{template "dests" .Dests}}
 {{- else}}
-<p>This page has no destinations, so no visitor sees a change.</p>
+<p>{{t "confirm.delete.none"}}</p>
 {{- end}}
-<div class="alert alert-danger">{{template "icon" "alert"}}<div>The stored HTML of this page is deleted too. This cannot be undone.</div></div>
+<div class="alert alert-danger">{{template "icon" "alert"}}<div>{{t "confirm.delete.warn"}}</div></div>
 </div>
 <form class="card-footer actions" method="post" action="{{.Action}}">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="hidden" name="confirm" value="true">
-<button class="btn btn-danger" type="submit">Delete page</button>
-<a class="btn" href="{{.BackHref}}">Keep page</a>
+<button class="btn btn-danger" type="submit">{{t "confirm.delete.btn"}}</button>
+<a class="btn" href="{{.BackHref}}">{{t "confirm.delete.keep"}}</a>
 </form>
 {{- end}}
 </div>

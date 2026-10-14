@@ -41,9 +41,32 @@ var (
 	}
 )
 
-// ValidateHTML rejects pages that are empty, not UTF-8 or over MaxHTMLBytes, and returns
-// non-blocking warnings (RF-17): external resources (RF-11) and any <script>.
-func ValidateHTML(data []byte) (warnings []string, err error) {
+// WarningCode is the stable code of a content warning.
+type WarningCode string
+
+// The content warnings.
+const (
+	WarningExternalResources WarningCode = "external-resources"
+	WarningScript            WarningCode = "script"
+)
+
+// Warning is a non-blocking finding in a page. Detail lists what was found (for
+// WarningExternalResources, the kinds of reference); String is the English text.
+type Warning struct {
+	Code   WarningCode
+	Detail []string
+}
+
+func (w Warning) String() string {
+	if w.Code == WarningExternalResources {
+		return fmt.Sprintf(WarnExternalResources, strings.Join(w.Detail, ", "))
+	}
+	return WarnScript
+}
+
+// Inspect is ValidateHTML with structured warnings, for callers that show them in another
+// language.
+func Inspect(data []byte) (warnings []Warning, err error) {
 	switch {
 	case len(data) == 0:
 		return nil, ErrEmptyHTML
@@ -59,12 +82,22 @@ func ValidateHTML(data []byte) (warnings []string, err error) {
 		}
 	}
 	if len(found) > 0 {
-		warnings = append(warnings, fmt.Sprintf(WarnExternalResources, strings.Join(found, ", ")))
+		warnings = append(warnings, Warning{Code: WarningExternalResources, Detail: found})
 	}
 	if scriptRe.Match(data) {
-		warnings = append(warnings, WarnScript)
+		warnings = append(warnings, Warning{Code: WarningScript})
 	}
 	return warnings, nil
+}
+
+// ValidateHTML rejects pages that are empty, not UTF-8 or over MaxHTMLBytes, and returns
+// non-blocking warnings (RF-17): external resources (RF-11) and any <script>.
+func ValidateHTML(data []byte) (warnings []string, err error) {
+	found, err := Inspect(data)
+	for _, w := range found {
+		warnings = append(warnings, w.String())
+	}
+	return warnings, err
 }
 
 // Template limits.
@@ -78,6 +111,47 @@ const (
 
 // ErrInvalidTemplateParams is wrapped by every RenderTemplate validation failure.
 var ErrInvalidTemplateParams = errors.New("invalid template values")
+
+// ParamProblem is the stable code of why a template value was refused.
+type ParamProblem string
+
+// The reasons a template value is refused.
+const (
+	ParamRequired    ParamProblem = "required"
+	ParamInvalidText ParamProblem = "invalid-text" // not valid text, or longer than Max
+	ParamControl     ParamProblem = "control"
+	ParamBadLang     ParamProblem = "bad-lang"
+	ParamBadRefresh  ParamProblem = "bad-refresh"
+)
+
+// ParamError is the RenderTemplate validation error: Field is the form field ("app_name",
+// "message", "icon", "lang" or "refresh"), Problem a code and Max the limit for ParamInvalidText;
+// Error is the English text. It wraps ErrInvalidTemplateParams.
+type ParamError struct {
+	Field   string
+	Problem ParamProblem
+	Max     int
+}
+
+func (e *ParamError) Unwrap() error { return ErrInvalidTemplateParams }
+
+func (e *ParamError) Error() string {
+	what := map[string]string{"app_name": "application name", "message": "message", "icon": "icon"}[e.Field]
+	var detail string
+	switch e.Problem {
+	case ParamRequired:
+		detail = fmt.Sprintf("the %s is required", what)
+	case ParamInvalidText:
+		detail = fmt.Sprintf("the %s must be valid text of at most %d characters", what, e.Max)
+	case ParamControl:
+		detail = fmt.Sprintf("the %s contains control characters", what)
+	case ParamBadLang:
+		detail = `language must be a tag such as "es" or "pt-BR"`
+	default:
+		detail = "refresh must be between 1 and 99999 seconds"
+	}
+	return ErrInvalidTemplateParams.Error() + ": " + detail
+}
 
 var langRe = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$`)
 
@@ -115,7 +189,7 @@ func RenderTemplate(tpl []byte, p TemplateParams) ([]byte, error) {
 	if p.Refresh == 0 {
 		p.Refresh = DefaultRefresh
 	}
-	if err := checkText("application name", p.AppName, MaxNameRunes, true, false); err != nil {
+	if err := checkText("app_name", p.AppName, MaxNameRunes, true, false); err != nil {
 		return nil, err
 	}
 	if err := checkText("message", p.Message, MaxMessageRunes, true, true); err != nil {
@@ -125,10 +199,10 @@ func RenderTemplate(tpl []byte, p TemplateParams) ([]byte, error) {
 		return nil, err
 	}
 	if !langRe.MatchString(p.Lang) {
-		return nil, fmt.Errorf("%w: language must be a tag such as \"es\" or \"pt-BR\"", ErrInvalidTemplateParams)
+		return nil, &ParamError{Field: "lang", Problem: ParamBadLang}
 	}
 	if p.Refresh < 1 || p.Refresh > 99999 {
-		return nil, fmt.Errorf("%w: refresh must be between 1 and 99999 seconds", ErrInvalidTemplateParams)
+		return nil, &ParamError{Field: "refresh", Problem: ParamBadRefresh}
 	}
 	r := strings.NewReplacer(
 		"{{APP_NAME}}", html.EscapeString(p.AppName),
@@ -140,19 +214,19 @@ func RenderTemplate(tpl []byte, p TemplateParams) ([]byte, error) {
 	return []byte(r.Replace(string(tpl))), nil
 }
 
-func checkText(what, v string, maxRunes int, required, multiline bool) error {
+func checkText(field, v string, maxRunes int, required, multiline bool) error {
 	if v == "" {
 		if required {
-			return fmt.Errorf("%w: the %s is required", ErrInvalidTemplateParams, what)
+			return &ParamError{Field: field, Problem: ParamRequired}
 		}
 		return nil
 	}
 	if !utf8.ValidString(v) || utf8.RuneCountInString(v) > maxRunes {
-		return fmt.Errorf("%w: the %s must be valid text of at most %d characters", ErrInvalidTemplateParams, what, maxRunes)
+		return &ParamError{Field: field, Problem: ParamInvalidText, Max: maxRunes}
 	}
 	for _, r := range v {
 		if unicode.IsControl(r) && !(multiline && (r == '\n' || r == '\r' || r == '\t')) {
-			return fmt.Errorf("%w: the %s contains control characters", ErrInvalidTemplateParams, what)
+			return &ParamError{Field: field, Problem: ParamControl}
 		}
 	}
 	return nil

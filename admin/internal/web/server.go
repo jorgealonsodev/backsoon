@@ -48,7 +48,7 @@ type Server struct {
 	now      func() time.Time
 	trusted  []netip.Prefix
 
-	tpl           *template.Template
+	tpl           map[string]*template.Template // one parsed set per language
 	style         template.CSS
 	mux           *http.ServeMux
 	uploadBodyMax int64
@@ -72,9 +72,13 @@ func New(o Options) (http.Handler, error) {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	tpl, err := parseTemplates()
-	if err != nil {
-		return nil, err
+	tpl := make(map[string]*template.Template, len(catalog))
+	for l := range catalog {
+		t, err := parseTemplates(locale(l))
+		if err != nil {
+			return nil, err
+		}
+		tpl[l] = t
 	}
 	style, err := siteStyle()
 	if err != nil {
@@ -103,6 +107,7 @@ func New(o Options) (http.Handler, error) {
 func (s *Server) routes() {
 	m := s.mux
 	m.HandleFunc("GET /healthz", s.healthz)
+	m.HandleFunc(langRoute, s.setLanguage)
 	m.HandleFunc("GET /login", s.loginPage)
 	m.HandleFunc("POST /login", s.loginSubmit)
 	m.HandleFunc("POST /logout", s.signedIn(s.logout))
@@ -116,11 +121,11 @@ func (s *Server) routes() {
 	m.HandleFunc("/", s.signedIn(s.notFound))
 }
 
-// ServeHTTP is the session gate: nothing but /login and /healthz is reachable without a valid
-// session, whatever the route or method, including unknown paths.
+// ServeHTTP is the session gate: nothing but /login, /healthz and the language selector (/lang) is
+// reachable without a valid session, whatever the route or method, including unknown paths.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
-	case "/healthz", "/login":
+	case "/healthz", "/login", langRoute:
 		s.mux.ServeHTTP(w, r)
 		return
 	}
@@ -153,7 +158,7 @@ func (s *Server) signedIn(h func(http.ResponseWriter, *http.Request, auth.Sessio
 // form, anything else (fetch, scripts, curl) gets 401.
 func (s *Server) unauthorized(w http.ResponseWriter, r *http.Request) {
 	if isFrameRequest(r) {
-		s.frameNotice(w)
+		s.frameNotice(w, r)
 		return
 	}
 	setSecurityHeaders(w.Header())
@@ -161,9 +166,10 @@ func (s *Server) unauthorized(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+	w.Header().Set("Vary", varyLocalized)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte("Authentication required. Sign in at /login.\n"))
+	w.Write([]byte(localeOf(r).T("plain.401")))
 }
 
 func isNavigation(r *http.Request) bool {
@@ -187,26 +193,27 @@ func (s *Server) base(sess auth.Session, title string) base {
 	return base{Title: title + " · backsoon", Authed: true, Who: s.user, CSRF: s.sessions.CSRFToken(sess)}
 }
 
-func (s *Server) errorPage(w http.ResponseWriter, sess auth.Session, status int, heading, message, backHref, backLabel string) {
-	s.render(w, status, "error", &errorView{
+func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, sess auth.Session, status int, heading, message, backHref, backLabel string) {
+	s.render(w, r, status, "error", &errorView{
 		base: s.base(sess, heading), Heading: heading, Message: message, BackHref: backHref, BackLabel: backLabel,
 	})
 }
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request, sess auth.Session) {
-	s.errorPage(w, sess, http.StatusNotFound, "Page not found", "There is nothing at this address.", "/", "Back to the directory")
+	loc := localeOf(r)
+	s.errorPage(w, r, sess, http.StatusNotFound, loc.T("err.notfound.title"), loc.T("err.notfound.body"), "/", loc.T("back.dir"))
 }
 
-func (s *Server) internalError(w http.ResponseWriter, sess auth.Session, what string, err error) {
+func (s *Server) internalError(w http.ResponseWriter, r *http.Request, sess auth.Session, what string, err error) {
 	s.log.Printf("%s failed: %v", what, err)
-	s.errorPage(w, sess, http.StatusInternalServerError, "Something went wrong",
-		"The change was not applied. Try again; if it keeps failing, check the panel's log.", "/", "Back to the directory")
+	loc := localeOf(r)
+	s.errorPage(w, r, sess, http.StatusInternalServerError, loc.T("err.internal.title"), loc.T("err.internal.body"), "/", loc.T("back.dir"))
 }
 
 // csrfFailed answers a state-changing request without a valid token (CA-21).
-func (s *Server) csrfFailed(w http.ResponseWriter, sess auth.Session) {
-	s.errorPage(w, sess, http.StatusForbidden, "This form has expired",
-		"The form expired or did not come from this panel, so nothing was changed. Reload the page and try again.", "/", "Back to the directory")
+func (s *Server) csrfFailed(w http.ResponseWriter, r *http.Request, sess auth.Session) {
+	loc := localeOf(r)
+	s.errorPage(w, r, sess, http.StatusForbidden, loc.T("err.csrf.title"), loc.T("err.csrf.body"), "/", loc.T("back.dir"))
 }
 
 func (s *Server) validCSRF(sess auth.Session, r *http.Request) bool {
