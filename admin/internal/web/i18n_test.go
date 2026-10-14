@@ -327,6 +327,9 @@ func TestSelectorOpensNothingElseWithoutASession(t *testing.T) {
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s /lang = %d, want 405", m, w.Code)
 		}
+		if w.Header().Get("Referrer-Policy") != "no-referrer" || w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s /lang 405 lacks the panel security headers: %v", m, w.Header())
+		}
 		for _, c := range w.Result().Cookies() {
 			if c.Name == langCookie {
 				t.Errorf("%s /lang set a language cookie", m)
@@ -463,7 +466,7 @@ func TestSpanishViews(t *testing.T) {
 	add("directory empty", hn.getL("/", s, es), 200,
 		"Páginas de mantenimiento", "Crea una página para el dominio de una aplicación", "Crear una página",
 		"Añadir página", "Cerrar sesión", "Consultar", "Cómo elige backsoon una página",
-		"Actualizado", "Todo lo demás", `aria-label="Acciones de`, "Vista previa a tamaño completo", "Editar")
+		"Actualizada", "Todo lo demás", `aria-label="Acciones de`, "Vista previa a tamaño completo", "Editar")
 	add("new", hn.getL("/pages/new", s, es), 200,
 		"Nueva página", "Nombre de la página", "Destinos", "Empezar desde", "Nombre de la aplicación", "Mensaje",
 		"Idioma", "Icono", "Crear página", "Cancelar", "Volver al directorio", "Un archivo .html subido")

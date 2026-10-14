@@ -143,12 +143,12 @@ func returnPath(r *http.Request) string {
 // next. It is reachable without a session (the login page needs it), so it does nothing else: an
 // unsupported language changes nothing, and next can only be a local path.
 func (s *Server) setLanguage(w http.ResponseWriter, r *http.Request) {
+	setSecurityHeaders(w.Header())
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	setSecurityHeaders(w.Header())
 	q := r.URL.Query()
 	if to := q["to"]; len(to) == 1 && supportedLang(to[0]) {
 		http.SetCookie(w, &http.Cookie{

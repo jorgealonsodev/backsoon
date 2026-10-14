@@ -269,7 +269,7 @@ var catalogES = map[string]string{
 	"dir.col.dests":          "Destinos",
 	"dir.col.preview":        "Vista previa",
 	"dir.match":              "Coincide",
-	"dir.updated":            "Actualizado",
+	"dir.updated":            "Actualizada",
 	"dir.else":               "Todo lo demás",
 	"dir.nodests":            "Sin destinos",
 	"dir.nodests.sub":        "Los visitantes nunca ven esta página.",
@@ -356,7 +356,7 @@ var catalogES = map[string]string{
 
 	// validation
 	"val.toolarge":            "El archivo supera los 512 KB. Quita las imágenes incrustadas o el CSS que no uses, o divide la página, y vuelve a subirlo.",
-	"val.notutf8":             "El archivo no es UTF-8 válido. Guárdalo como UTF-8 (la mayoría de los editores lo ofrecen en «Guardar como» o «Codificación») y vuelve a subirlo.",
+	"val.notutf8":             "El archivo no es UTF-8 válido. Guárdalo como UTF-8 (la mayoría de los editores lo ofrecen en “Guardar como” o “Codificación”) y vuelve a subirlo.",
 	"val.empty":               "El archivo está vacío. Elige un archivo .html que tenga contenido.",
 	"val.expired":             "La subida pendiente caducó (las subidas pendientes se conservan 15 minutos). Vuelve a subir el archivo.",
 	"val.file.unread":         "No se pudo leer el archivo. Vuelve a elegirlo.",
