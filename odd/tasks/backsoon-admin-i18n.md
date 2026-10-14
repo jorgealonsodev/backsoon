@@ -16,7 +16,7 @@ Branch: feat/admin-i18n from main 5c11720. Delivery (push, merge) stays the user
 
 ## Tasks
 
-- T1 | S1–S7 | delegated worker (admin/internal/web/**, admin/internal/pages/** for message codes only, test/admin-e2e.sh, README.md, DESIGN.md) | pending | commit: —
+- T1 | S1–S7 | delegated worker mv8edcn5-4-205n | done (go test 7/7, lint 0, admin-e2e 430/0) | commit: 938e085
 - T2 | S1–S6 | independent verify (security: new session-less route) | pending | commit: —
 - T3 | S8–S9 | delegated worker after T1 (README.md, README.es.md, docs/install.md, docs/install.es.md) | pending | commit: —
 
@@ -27,3 +27,4 @@ L2 — User chose "Automático según el navegador + selector" over a BACKSOON_A
 L3 — Exploration: ~90 user-visible strings in admin/internal/web/*.go, 6 templates (layout, login, directory, form, confirm, error) plus framenotice.go; pages-package errors reach the UI through manage.go:163-178 (prefix-stripped err.Error()), directory.go:43 and content warnings in admin/internal/pages/content.go; responses already Cache-Control: no-store (views.go:221).
 L4 — User (2026-10-14, while T1 was being delegated): "documentacion tambien en español". Parent scope: Spanish counterparts of the user-facing README and install guide (S8, T3), sequenced after T1 because both touch README.md.
 L5 — User (2026-10-14): "Y la instalacion tiene que ser muy sencilla de entender". Parent scope: S9 (quick-path-first install guide and README Install section, both languages), folded into T3.
+L6 — T1 delivered by worker mv8edcn5-4-205n: RED 11 web tests + pages compile failure, GREEN go test -race 7/7, lint 0, admin-e2e 430/0; parent re-ran go test 7/7 and lint 0; committed 938e085. Open point raised: the seeded default page is stored as "Default page" (user data, renameable), so the Spanish directory shows it in English. Parent decision (S1 scope): while the stored name is exactly the seeded "Default page", display it localized ("Página predeterminada"); a renamed page shows its own name. Follow-up on T1's worker.
