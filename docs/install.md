@@ -24,9 +24,10 @@ Then [verify](#verification). To undo everything, see [Rollback](#rollback).
 
 | Kind | Name | Notes |
 |------|------|-------|
-| Containers | `backsoon-init`, `backsoon`, `backsoon-admin` | Fixed `container_name`s, so a host can run only one backsoon stack. `backsoon-init` is a one-shot that exits with code 0. |
-| Volumes | `backsoon_pages`, `backsoon_meta` | Fixed names. `backsoon_pages` holds the served pages; `backsoon_meta` holds the panel's `sites.json` and original HTML. |
-| Network | `proxy` (external) | Must exist before the deploy. The stack publishes **no ports**. |
+| Containers | `backsoon-init`, `backsoon`, `backsoon-admin`, `backsoon-npm-snippet` | Fixed `container_name`s, so a host can run only one backsoon stack. `backsoon-init` and `backsoon-npm-snippet` are one-shots that exit with code 0. |
+| Volumes | `backsoon_pages`, `backsoon_meta`, `backsoon_npm_custom` | Fixed names. `backsoon_pages` holds the served pages; `backsoon_meta` holds the panel's `sites.json` and original HTML; `backsoon_npm_custom` stays empty (it stands in for NPM's directory when `BACKSOON_NPM_CUSTOM_DIR` is unset). |
+| Network | `proxy` (external, or `BACKSOON_PROXY_NETWORK`) | Must exist before the deploy. |
+| Ports | `127.0.0.1:8181` → panel `8080` | `BACKSOON_ADMIN_HOST_BIND` and `BACKSOON_ADMIN_HOST_PORT`. `backsoon` publishes nothing. |
 
 `backsoon-init` seeds the provisional `default.html` into `backsoon_pages` (it never overwrites an existing one) and hands the volume to uid 65532, the panel's user, on every deploy. `backsoon` and `backsoon-admin` wait for it to finish successfully. The panel listens on port 8080 inside the network; `backsoon` listens on port 80.
 
@@ -119,9 +120,15 @@ If `backsoon-admin` is restarting, read `docker logs backsoon-admin`: it names t
 
 ## Step 3: install `server_proxy.conf` in NPM
 
-Decide first whether any of your applications legitimately answers `503` itself. The shipped file intercepts `502`, `503` and `504`. To leave application `503` responses alone, run the optional `sed` line below between the copy and the rename: it changes the one business line to `error_page 502 504 =503 @backsoon;` and nothing else.
+Decide first whether any of your applications legitimately answers `503` itself. The shipped file intercepts `502`, `503` and `504`. To leave application `503` responses alone, use the variant whose one business line is `error_page 502 504 =503 @backsoon;`.
 
-Install the file, validate and reload:
+### Automatic (recommended)
+
+Set `BACKSOON_NPM_CUSTOM_DIR` to the **host** path of NPM's `/data/nginx/custom` directory (for NPM with `/docker/nginx-proxy-manager/data` bound to `/data`: `/docker/nginx-proxy-manager/data/nginx/custom`), and `BACKSOON_NPM_INTERCEPT_503=false` for the variant. On every deploy the one-shot `backsoon-npm-snippet` service writes the file atomically (`docker logs backsoon-npm-snippet` says `installed` or `unchanged`); it refuses, and changes nothing, if a `server_proxy.conf` that does not route to `@backsoon` is already there. `backsoon` and the panel wait for it, so a refusal stops the deploy, like any other configuration error: containers that the deploy recreates (always on the first deploy of a new version) stay stopped until you fix the variable or move the foreign file and redeploy. The file belongs to backsoon: every deploy replaces edits made to it, so choose the variant with `BACKSOON_NPM_INTERCEPT_503` instead of editing it. Check the path: a mistyped `BACKSOON_NPM_CUSTOM_DIR` makes Docker create an empty directory that NPM never reads. If NPM runs as a non-root user (`PUID`/`PGID`) and owns that directory, the installer, which has no capabilities, cannot write there and says so. It cannot reload NPM: NPM applies the file at its next reload, which happens when you save any proxy host (creating the panel's host in step 4 is enough) or restart NPM. To check or force it now: `docker exec <npm> nginx -t && docker exec <npm> nginx -s reload`.
+
+### By hand
+
+Install the file, validate and reload (run the optional `sed` line between the copy and the rename for the variant):
 
 ```sh
 docker exec <npm> mkdir -p /data/nginx/custom
@@ -142,7 +149,7 @@ Do not put anything in the proxy hosts' *Advanced* tab: the global file is the o
 
 ## Step 4: publish the panel, log in, create pages
 
-1. In NPM, add a **proxy host** with these values (the labels may differ slightly between NPM versions):
+1. In NPM, add a **proxy host** with these values (the labels may differ slightly between NPM versions). Forward by container name over the shared network, as below, not to the panel's published host port: the fallback needs that network anyway (`backsoon:80`), and through the host port NPM's address falls outside `BACKSOON_TRUSTED_PROXIES`, so all visitors would share one login-limit counter:
 
    | Field | Value |
    |-------|-------|
@@ -153,7 +160,7 @@ Do not put anything in the proxy hosts' *Advanced* tab: the global file is the o
    | SSL | request or select a certificate and force SSL |
    | Advanced | empty |
 
-   The panel's session cookie is `Secure`, so the login only works over HTTPS. Keep the NPM Access List or a LAN/VPN-only host in mind for an extra layer.
+   The panel's session cookie is `Secure`, so the login only works over HTTPS (or on `http://localhost`, for example through an SSH tunnel to the published `127.0.0.1:8181`). Keep the NPM Access List or a LAN/VPN-only host in mind for an extra layer.
 2. Repeat `nginx -t && nginx -s reload` in NPM if this is your first proxy host (see step 3).
 3. Open `https://backsoon.example.com`, log in with `BACKSOON_ADMIN_USER` and the password you hashed.
 4. Create a page from the template (or upload your own `.html`) and give it its **destinations**: the application's domain (`app1.example.com`) or the `service:port` NPM forwards to (`app1:3000`). The first match wins in the order domain, then `service:port`, then the default page. Changes apply to the next request, with no restart.
@@ -194,14 +201,14 @@ A refused connection from the application logs `502 : 503`. A stopped container 
 
 ## Rollback
 
-Disable the global file (nothing else changes: no proxy host, no stored page):
+Disable the global file (nothing else changes: no proxy host, no stored page). With the automatic install, first remove `BACKSOON_NPM_CUSTOM_DIR` from the stack and redeploy; otherwise the next deploy installs the file again and NPM picks it up at its next reload. Then:
 
 ```sh
 docker exec <npm> mv /data/nginx/custom/server_proxy.conf /data/nginx/custom/server_proxy.conf.off
 docker exec <npm> nginx -t && docker exec <npm> nginx -s reload
 ```
 
-NPM includes the file optionally, so the reload does not fail. The `backsoon` containers may stay up or be stopped; they have no effect without the file. Restore with `docker exec <npm> mv /data/nginx/custom/server_proxy.conf.off /data/nginx/custom/server_proxy.conf` and the same `nginx -t && nginx -s reload`. To remove the stack, delete it in Portainer or run `docker compose down`; add `-v` only if you also want to delete the pages and panel data (`backsoon_pages`, `backsoon_meta`).
+NPM includes the file optionally, so the reload does not fail. The `backsoon` containers may stay up or be stopped; they have no effect without the file. Restore with `docker exec <npm> mv /data/nginx/custom/server_proxy.conf.off /data/nginx/custom/server_proxy.conf` and the same `nginx -t && nginx -s reload`. To remove the stack, delete it in Portainer or run `docker compose down`; add `-v` only if you also want to delete the pages and panel data (`backsoon_pages`, `backsoon_meta`, and the empty `backsoon_npm_custom`). Removing the stack does not remove an automatically installed `server_proxy.conf`: disable it as above.
 
 ## After updating NPM
 

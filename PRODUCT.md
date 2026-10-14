@@ -17,7 +17,7 @@ One global NPM snippet plus a static nginx: adding an application never touches 
 
 ## Operating Context
 - Docker + Portainer + Nginx Proxy Manager; one Portainer stack; pages live in named volumes.
-- The panel is published through an NPM proxy host with HTTPS and no published ports; it can additionally sit behind an NPM Access List.
+- The panel is published through an NPM proxy host with HTTPS (its host port defaults to loopback only); it can additionally sit behind an NPM Access List.
 - Typical session: a redeploy is about to happen or is happening; the administrator opens the panel, finds the application's page, checks its destinations and preview, or uploads a replacement.
 
 ## Capabilities and Constraints

@@ -303,6 +303,75 @@ host
 target' "$(vol_sh "$race_vol" 'ls -A /pages')"
 }
 
+# snippet VOLUME [docker run args...]: the production backsoon-npm-snippet service against VOLUME,
+# which stands in for NPM's /data/nginx/custom directory.
+snippet() {
+  _vol=$1
+  shift
+  # Same hardening as the compose service: offline, read-only, no capabilities.
+  job -v "$_vol:/npm-custom" --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+    "$@" --entrypoint /usr/local/bin/backsoon-npm-snippet "$IMAGE"
+}
+npm_sh() { job -v "$1:/npm-custom" --entrypoint sh "$IMAGE" -c "$2"; }
+
+case_npm_snippet() {
+  section "installing server_proxy.conf into NPM (backsoon-npm-snippet)"
+  canonical=$(sha256sum < npm/server_proxy.conf | cut -d' ' -f1)
+  dir=/docker/npm/data/nginx/custom
+
+  make_volume "$ID-npm-off"
+  out=$(snippet "$ID-npm-off" 2>&1); code=$?
+  expect_eq "unset BACKSOON_NPM_CUSTOM_DIR: exit 0" 0 "$code"
+  expect_has "unset BACKSOON_NPM_CUSTOM_DIR: says nothing was installed" "$out" 'BACKSOON_NPM_CUSTOM_DIR is not set'
+  expect_eq "unset BACKSOON_NPM_CUSTOM_DIR: writes nothing" "" "$(npm_sh "$ID-npm-off" 'ls -A /npm-custom')"
+
+  make_volume "$ID-npm"
+  out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" 2>&1); code=$?
+  expect_eq "install: exit 0" 0 "$code"
+  expect_has "install: names the host file" "$out" "installed $dir/server_proxy.conf"
+  expect_has "install: says when NPM applies it" "$out" 'next reload'
+  expect_eq "install: only server_proxy.conf, no temporary file left" server_proxy.conf "$(npm_sh "$ID-npm" 'ls -A /npm-custom')"
+  expect_eq "install: identical to npm/server_proxy.conf" "$canonical" "$(npm_sh "$ID-npm" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+  expect_eq "install: mode 644" 644 "$(npm_sh "$ID-npm" 'stat -c %a /npm-custom/server_proxy.conf')"
+
+  out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" 2>&1); code=$?
+  expect_eq "redeploy: exit 0" 0 "$code"
+  expect_has "redeploy: reports the file unchanged" "$out" 'unchanged'
+  expect_eq "redeploy: file still canonical" "$canonical" "$(npm_sh "$ID-npm" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+
+  out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_INTERCEPT_503=false 2>&1); code=$?
+  expect_eq "BACKSOON_NPM_INTERCEPT_503=false: exit 0" 0 "$code"
+  conf=$(npm_sh "$ID-npm" 'cat /npm-custom/server_proxy.conf')
+  expect_has "BACKSOON_NPM_INTERCEPT_503=false: application 503 passes through" "$conf" 'error_page 502 504 =503 @backsoon;'
+  expect_lacks "BACKSOON_NPM_INTERCEPT_503=false: 503 no longer intercepted" "$conf" 'error_page 502 503 504 =503 @backsoon;'
+  expect_eq "BACKSOON_NPM_INTERCEPT_503=false: only the business line differs" 1 \
+    "$(printf '%s\n' "$conf" | diff npm/server_proxy.conf - | grep -c '^>')"
+
+  snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_INTERCEPT_503=true >/dev/null 2>&1
+  expect_eq "BACKSOON_NPM_INTERCEPT_503=true: back to the canonical file" "$canonical" "$(npm_sh "$ID-npm" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+
+  out=$(snippet "$ID-npm" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" -e BACKSOON_NPM_INTERCEPT_503=maybe 2>&1); code=$?
+  if [ "$code" != 0 ]; then ok "invalid BACKSOON_NPM_INTERCEPT_503: exits non-zero ($code)"; else ko "invalid BACKSOON_NPM_INTERCEPT_503: exits non-zero" "exit 0"; fi
+  expect_has "invalid BACKSOON_NPM_INTERCEPT_503: message names the variable" "$out" BACKSOON_NPM_INTERCEPT_503
+  expect_eq "invalid BACKSOON_NPM_INTERCEPT_503: file unchanged" "$canonical" "$(npm_sh "$ID-npm" 'sha256sum < /npm-custom/server_proxy.conf | cut -d" " -f1')"
+
+  make_volume "$ID-npm-foreign"
+  npm_sh "$ID-npm-foreign" 'printf "proxy_set_header X-Mine 1;\n" > /npm-custom/server_proxy.conf'
+  out=$(snippet "$ID-npm-foreign" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" 2>&1); code=$?
+  if [ "$code" != 0 ]; then ok "foreign server_proxy.conf: exits non-zero ($code)"; else ko "foreign server_proxy.conf: exits non-zero" "exit 0"; fi
+  expect_has "foreign server_proxy.conf: says it was not installed by backsoon" "$out" 'not installed by backsoon'
+  expect_eq "foreign server_proxy.conf: left untouched" 'proxy_set_header X-Mine 1;' "$(npm_sh "$ID-npm-foreign" 'cat /npm-custom/server_proxy.conf')"
+  expect_eq "foreign server_proxy.conf: no temporary file left" server_proxy.conf "$(npm_sh "$ID-npm-foreign" 'ls -A /npm-custom')"
+
+  # NPM run with PUID/PGID owns its directory; the installer has no CAP_DAC_OVERRIDE.
+  make_volume "$ID-npm-puid"
+  npm_sh "$ID-npm-puid" 'chown 1000:1000 /npm-custom && chmod 0755 /npm-custom'
+  out=$(snippet "$ID-npm-puid" -e "BACKSOON_NPM_CUSTOM_DIR=$dir" 2>&1); code=$?
+  if [ "$code" != 0 ]; then ok "directory owned by another user: exits non-zero ($code)"; else ko "directory owned by another user: exits non-zero" "exit 0"; fi
+  expect_has "directory owned by another user: says it cannot write there" "$out" "backsoon-npm-snippet: cannot write to $dir"
+  expect_eq "directory owned by another user: nothing written" "" "$(npm_sh "$ID-npm-puid" 'ls -A /npm-custom')"
+}
+
 run_all_cases() {
   case_template
   case_health_and_basics
@@ -316,4 +385,5 @@ run_all_cases() {
   case_refresh_validation
   case_seed
   case_seed_concurrency
+  case_npm_snippet
 }

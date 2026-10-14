@@ -77,13 +77,36 @@ if command -v python3 >/dev/null 2>&1; then
   if [ "$got" = 'jc21/nginx-proxy-manager:2.16.0 jc21/nginx-proxy-manager:2.16.0' ]; then pass "the test NPM defaults to 2.16.0"; else fail "the test NPM defaults to 2.16.0" "got [$got]"; fi
   got=$(npm_image jc21/nginx-proxy-manager:2.15.1)
   if [ "$got" = 'jc21/nginx-proxy-manager:2.15.1 jc21/nginx-proxy-manager:2.15.1' ]; then pass "BACKSOON_TEST_NPM_IMAGE selects the test NPM"; else fail "BACKSOON_TEST_NPM_IMAGE selects the test NPM" "got [$got]"; fi
+  # compose_json: docker-compose.yml resolved with only the given BACKSOON_ variables set.
+  compose_json() {
+    env -u BACKSOON_ADMIN_HOST_BIND -u BACKSOON_ADMIN_HOST_PORT -u BACKSOON_NPM_CUSTOM_DIR -u BACKSOON_NPM_INTERCEPT_503 \
+      "$@" docker compose -f docker-compose.yml config --format json 2>/dev/null
+  }
+  admin_ports() {
+    compose_json "$@" | python3 -I -c 'import json, sys; p = json.load(sys.stdin)["services"]["backsoon-admin"].get("ports", []); print(" ".join("%s:%s:%s" % (x.get("host_ip", ""), x.get("published"), x.get("target")) for x in p))' 2>/dev/null
+  }
+  snippet_mount() {
+    compose_json "$@" | python3 -I -c 'import json, sys; v = json.load(sys.stdin)["services"]["backsoon-npm-snippet"]["volumes"]; print(" ".join("%s:%s:%s" % (x["type"], x["source"], x["target"]) for x in v))' 2>/dev/null
+  }
+  got=$(admin_ports)
+  if [ "$got" = '127.0.0.1:8181:8080' ]; then pass "the panel is published on 127.0.0.1:8181 by default"; else fail "the panel is published on 127.0.0.1:8181 by default" "got [$got]"; fi
+  got=$(admin_ports BACKSOON_ADMIN_HOST_BIND=0.0.0.0 BACKSOON_ADMIN_HOST_PORT=28181)
+  if [ "$got" = '0.0.0.0:28181:8080' ]; then pass "BACKSOON_ADMIN_HOST_BIND and _PORT choose the published panel port"; else fail "BACKSOON_ADMIN_HOST_BIND and _PORT choose the published panel port" "got [$got]"; fi
+  got=$(snippet_mount)
+  if [ "$got" = 'volume:backsoon_npm_custom:/npm-custom' ]; then pass "without BACKSOON_NPM_CUSTOM_DIR the snippet service gets a private volume"; else fail "without BACKSOON_NPM_CUSTOM_DIR the snippet service gets a private volume" "got [$got]"; fi
+  got=$(snippet_mount BACKSOON_NPM_CUSTOM_DIR=/docker/nginx-proxy-manager/data/nginx/custom)
+  if [ "$got" = 'bind:/docker/nginx-proxy-manager/data/nginx/custom:/npm-custom' ]; then pass "BACKSOON_NPM_CUSTOM_DIR binds NPM's custom directory"; else fail "BACKSOON_NPM_CUSTOM_DIR binds NPM's custom directory" "got [$got]"; fi
+  got=$(compose_json | python3 -I -c 'import json, sys; s = json.load(sys.stdin)["services"]; n = s["backsoon-npm-snippet"]; deps = [k for k, v in s.items() if "backsoon-npm-snippet" in (v.get("depends_on") or {})]; print(n.get("network_mode"), n.get("restart"), n.get("read_only"), ",".join(n.get("cap_drop", [])), ",".join(sorted(k for k in deps if s[k]["depends_on"]["backsoon-npm-snippet"]["condition"] == "service_completed_successfully")) or "-")' 2>/dev/null)
+  if [ "$got" = 'none no True ALL backsoon,backsoon-admin' ]; then pass "the snippet service is one-shot, offline, read-only, without capabilities, and backsoon and the panel wait for it"; else fail "the snippet service is one-shot, offline, read-only, without capabilities, and backsoon and the panel wait for it" "got [$got]"; fi
+  got=$(compose_json | python3 -I -c 'import json, sys; s = json.load(sys.stdin)["services"]; print(",".join(sorted(k for k, v in s.items() if v.get("build") and v.get("pull_policy") != "build")) or "-")' 2>/dev/null)
+  if [ "$got" = '-' ]; then pass "every built service rebuilds on deploy (pull_policy: build)"; else fail "every built service rebuilds on deploy (pull_policy: build)" "not rebuilt: [$got]"; fi
 else
   skip "python3 not available: network and NPM image overrides not checked"
 fi
 
 prod=$(docker compose -f docker-compose.yml config 2>/dev/null)
 serving=$(printf '%s\n' "$prod" | awk '/^  backsoon:$/ { f = 1; next } /^  [^ ]/ { f = 0 } f')
-if printf '%s\n' "$prod" | grep -Eq '^ +(ports|published):'; then fail "production compose publishes no ports"; else pass "production compose publishes no ports"; fi
+if printf '%s\n' "$serving" | grep -Eq '^ +(ports|published):'; then fail "backsoon publishes no ports"; else pass "backsoon publishes no ports"; fi
 if printf '%s\n' "$serving" | grep -q 'restart: unless-stopped'; then pass "backsoon restarts unless-stopped"; else fail "backsoon restarts unless-stopped"; fi
 if printf '%s\n' "$serving" | grep -q 'healthcheck:' && printf '%s\n' "$serving" | grep -q '/healthz'; then pass "backsoon has a /healthz healthcheck"; else fail "backsoon has a /healthz healthcheck"; fi
 if printf '%s\n' "$serving" | grep -q 'read_only: true' && printf '%s\n' "$serving" | grep -q 'target: /pages'; then pass "pages volume is read-only for backsoon"; else fail "pages volume is read-only for backsoon"; fi
@@ -93,7 +116,6 @@ panel=$(printf '%s\n' "$prod" | awk '/^  backsoon-admin:$/ { f = 1; next } /^  [
 if [ -n "$panel" ]; then pass "production compose defines backsoon-admin"; else fail "production compose defines backsoon-admin"; fi
 if printf '%s\n' "$panel" | grep -q 'restart: unless-stopped'; then pass "backsoon-admin restarts unless-stopped"; else fail "backsoon-admin restarts unless-stopped"; fi
 if printf '%s\n' "$panel" | grep -q 'healthcheck:' && printf '%s\n' "$panel" | grep -q -- '-healthcheck'; then pass "backsoon-admin has a -healthcheck healthcheck"; else fail "backsoon-admin has a -healthcheck healthcheck"; fi
-if printf '%s\n' "$panel" | grep -Eq '^ +(ports|published):'; then fail "backsoon-admin publishes no ports"; else pass "backsoon-admin publishes no ports"; fi
 if printf '%s\n' "$panel" | grep -q 'proxy: null' && printf '%s\n' "$panel" | grep -q 'source: backsoon_pages' && printf '%s\n' "$panel" | grep -q 'source: backsoon_meta'; then pass "backsoon-admin joins proxy and mounts the pages and meta volumes"; else fail "backsoon-admin joins proxy and mounts the pages and meta volumes"; fi
 if printf '%s\n' "$panel" | grep -q 'condition: service_completed_successfully'; then pass "backsoon-admin waits for backsoon-init"; else fail "backsoon-admin waits for backsoon-init"; fi
 if printf '%s\n' "$panel" | grep -q 'BACKSOON_REFRESH: "10"'; then pass "backsoon-admin shares the BACKSOON_REFRESH default"; else fail "backsoon-admin shares the BACKSOON_REFRESH default"; fi
@@ -130,7 +152,16 @@ else
   fail "go toolchain not found: gofmt and go vet for admin/ need it"
 fi
 if grep -rEn '<script src|<link |@import|url\(http' templates/; then fail "templates are self-contained (CA-14)"; else pass "templates are self-contained (CA-14)"; fi
-for f in test/*.sh nginx/docker-entrypoint.d/*.sh; do
+# A source the images copy but Git ignores would build locally and break a deploy from Git.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  ignored=$(awk '$1 == "COPY" { for (i = 2; i < NF; i++) if ($i !~ /^--/ && $i !~ /^\//) print $i }' nginx/Dockerfile admin/Dockerfile |
+    while read -r src; do git check-ignore -q "$src" && printf '%s ' "$src"; done)
+  if [ -z "$ignored" ]; then pass "no file the Dockerfiles copy is ignored by Git"; else fail "no file the Dockerfiles copy is ignored by Git" "ignored: $ignored"; fi
+else
+  skip "not a Git checkout: ignored build sources not checked"
+fi
+
+for f in test/*.sh nginx/docker-entrypoint.d/*.sh nginx/*.sh; do
   check "sh -n $f" sh -n "$f"
 done
 

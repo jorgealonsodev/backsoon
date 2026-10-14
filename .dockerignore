@@ -4,6 +4,8 @@
 !nginx/**
 !templates/
 !templates/maintenance.html
+!npm/
+!npm/server_proxy.conf
 !admin/
 !admin/go.mod
 !admin/go.sum

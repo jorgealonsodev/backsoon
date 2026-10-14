@@ -1,9 +1,12 @@
 # backsoon production stack (single stack, e.g. Portainer). Build context is the repository root.
 # Prerequisite: an external network that Nginx Proxy Manager is attached to, named "proxy" or
 # whatever BACKSOON_PROXY_NETWORK says (e.g. an existing NPM network such as npm-nw).
-# No published ports: NPM reaches backsoon and backsoon-admin through that network only.
+# NPM reaches backsoon and backsoon-admin through that network. backsoon publishes no ports; the
+# panel is also published on BACKSOON_ADMIN_HOST_BIND:BACKSOON_ADMIN_HOST_PORT (127.0.0.1:8181).
 # backsoon-admin (the panel) is optional for serving: backsoon never depends on it (RNF-4a).
 
+# Every service builds from this repository; pull_policy: build rebuilds on every deploy, so a
+# redeploy picks up the checked-out sources instead of reusing an older local image.
 x-backsoon-build: &backsoon-build
   context: .
   dockerfile: nginx/Dockerfile
@@ -18,6 +21,7 @@ services:
   backsoon-init:
     build: *backsoon-build
     image: backsoon:local
+    pull_policy: build
     container_name: backsoon-init
     entrypoint: ["sh", "-c"]
     command: ["sh /docker-entrypoint.d/45-backsoon-seed.sh && chown -R 65532:65532 /pages"]
@@ -31,6 +35,7 @@ services:
   backsoon:
     build: *backsoon-build
     image: backsoon:local
+    pull_policy: build
     container_name: backsoon
     restart: unless-stopped
     environment:
@@ -42,6 +47,8 @@ services:
     depends_on:
       backsoon-init:
         condition: service_completed_successfully
+      backsoon-npm-snippet:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 30s
@@ -49,14 +56,41 @@ services:
       retries: 3
       start_period: 5s
 
-  # The management panel. Reach it through an NPM proxy host (e.g. backsoon.example.com ->
-  # backsoon-admin:8080) with SSL; it publishes no ports. Credentials come from the stack's
-  # variables (see env.example); without them the panel refuses to start.
+  # One-shot: copies the NPM fallback into NPM's custom directory (BACKSOON_NPM_CUSTOM_DIR, the
+  # host path of NPM's /data/nginx/custom); unset, it installs nothing. Offline, read-only and
+  # without capabilities. backsoon and the panel wait for it, so like an invalid BACKSOON_REFRESH a
+  # refusal (a foreign server_proxy.conf, an invalid BACKSOON_NPM_INTERCEPT_503) stops the deploy
+  # with its reason in `docker logs backsoon-npm-snippet`, and `up --wait` accepts its exit.
+  # NPM applies the file at its next reload (saving any proxy host, or restarting NPM).
+  backsoon-npm-snippet:
+    build: *backsoon-build
+    image: backsoon:local
+    pull_policy: build
+    container_name: backsoon-npm-snippet
+    entrypoint: ["/usr/local/bin/backsoon-npm-snippet"]
+    environment:
+      BACKSOON_NPM_CUSTOM_DIR: ${BACKSOON_NPM_CUSTOM_DIR:-}
+      BACKSOON_NPM_INTERCEPT_503: ${BACKSOON_NPM_INTERCEPT_503:-true}
+    volumes:
+      - ${BACKSOON_NPM_CUSTOM_DIR:-backsoon_npm_custom}:/npm-custom
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  # The management panel. Reach it through an NPM proxy host with SSL, either by name
+  # (backsoon.example.com -> backsoon-admin:8080) or through the published host port. Its session
+  # cookie is Secure: plain http on the host port cannot sign in (except http://localhost).
+  # Credentials come from the stack's variables (see env.example); without them it refuses to start.
   backsoon-admin:
     build:
       context: .
       dockerfile: admin/Dockerfile
     image: backsoon-admin:local
+    pull_policy: build
     container_name: backsoon-admin
     restart: unless-stopped
     environment:
@@ -71,6 +105,8 @@ services:
       - backsoon_meta:/meta
     networks:
       - proxy
+    ports:
+      - "${BACKSOON_ADMIN_HOST_BIND:-127.0.0.1}:${BACKSOON_ADMIN_HOST_PORT:-8181}:8080"
     read_only: true
     tmpfs:
       - /tmp
@@ -80,6 +116,8 @@ services:
       - no-new-privileges:true
     depends_on:
       backsoon-init:
+        condition: service_completed_successfully
+      backsoon-npm-snippet:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/usr/local/bin/backsoon-admin", "-healthcheck"]
@@ -98,3 +136,6 @@ volumes:
     name: backsoon_pages
   backsoon_meta:
     name: backsoon_meta
+  # Placeholder for /npm-custom when BACKSOON_NPM_CUSTOM_DIR is unset; never read by NPM.
+  backsoon_npm_custom:
+    name: backsoon_npm_custom

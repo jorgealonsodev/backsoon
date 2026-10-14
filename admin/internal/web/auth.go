@@ -167,8 +167,8 @@ func waitText(d time.Duration) string {
 
 // clientIP is the key of the login limiter: the address of the connection's peer, unless that
 // peer is a trusted proxy, in which case X-Real-IP, which Nginx Proxy Manager sets and
-// overwrites. A nil trusted list trusts every peer (BACKSOON_TRUSTED_PROXIES unset): the panel
-// publishes no port, but any container on its network could then forge X-Real-IP.
+// overwrites. A nil trusted list trusts every peer (BACKSOON_TRUSTED_PROXIES unset): any
+// container on its network, or client of its published host port, could then forge X-Real-IP.
 func clientIP(r *http.Request, trusted []netip.Prefix) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

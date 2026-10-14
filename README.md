@@ -20,8 +20,8 @@ A friendly maintenance page for apps behind Nginx Proxy Manager (NPM). When an u
 To run backsoon next to your Nginx Proxy Manager (NPM), follow the **[installation guide](docs/install.md)**. It takes four steps and works with Portainer or plain `docker compose`:
 
 1. Create the external `proxy` network and attach NPM to it.
-2. Deploy the stack: it builds its own images from this repository and publishes no ports. Credentials are in [Configuration](#configuration) and [Admin panel](#admin-panel).
-3. Install [`npm/server_proxy.conf`](npm/server_proxy.conf) in NPM, validate and reload.
+2. Deploy the stack: it builds its own images from this repository; `backsoon` publishes no ports and the panel only `127.0.0.1:8181` by default. Credentials are in [Configuration](#configuration) and [Admin panel](#admin-panel).
+3. Install [`npm/server_proxy.conf`](npm/server_proxy.conf) in NPM: automatically on every deploy with `BACKSOON_NPM_CUSTOM_DIR`, or by hand. NPM applies it at its next reload.
 4. Publish the panel through an NPM proxy host, log in and create the pages.
 
 The guide also covers [verification](docs/install.md#verification), [what happens when `backsoon` or the panel is stopped](docs/install.md#when-backsoon-or-the-panel-is-stopped), [rollback](docs/install.md#rollback) and [what to do after updating NPM](docs/install.md#after-updating-npm).
@@ -41,7 +41,7 @@ curl -si -H 'Accept: application/json' http://127.0.0.1:8088/   # 503 + {"status
 
 Clean up with `docker rm -f backsoon-try && docker volume rm backsoon_try_pages`.
 
-Production uses the same pieces through `docker-compose.yml`: a one-shot `backsoon-init` seeds the volume, then `backsoon` serves it read-only on the external `proxy` network, with no published ports (`docker network create proxy` first, and attach NPM to it).
+Production uses the same pieces through `docker-compose.yml`: a one-shot `backsoon-init` seeds the volume, then `backsoon` serves it read-only on the external `proxy` network (or `BACKSOON_PROXY_NETWORK`), with no published ports (`docker network create proxy` first, and attach NPM to it).
 
 ## How a page is chosen
 
@@ -67,6 +67,10 @@ The example lists every variable the stack reads. Its secrets are deliberately b
 | `BACKSOON_ADMIN_PASSWORD_HASH` | none | bcrypt hash of the administrator password. Preferred; wins if both password variables are set. |
 | `BACKSOON_ADMIN_PASSWORD` | none | Plaintext alternative (at most 72 bytes). Accepted, with a warning in the panel log. |
 | `BACKSOON_SESSION_SECRET` | none | Random secret of at least 32 bytes that signs the 12-hour session cookies. Required by the panel. Signing out revokes the session at once, but the panel keeps that list in memory: after a panel restart, a copy of a signed-out cookie works again until its 12 hours end. Change this secret to end every session. |
+| `BACKSOON_ADMIN_HOST_BIND` | `127.0.0.1` | Host address the panel's port is published on. Use `0.0.0.0` only if NPM or someone else must reach it through the host's IP; `127.0.0.1` keeps it local (SSH tunnel). |
+| `BACKSOON_ADMIN_HOST_PORT` | `8181` | Host port published for the panel (container port 8080). |
+| `BACKSOON_NPM_CUSTOM_DIR` | none | Host path of NPM's `/data/nginx/custom` directory, for example `/docker/nginx-proxy-manager/data/nginx/custom`. When set, the one-shot `backsoon-npm-snippet` service installs `server_proxy.conf` there on every deploy (unchanged files are left alone; a `server_proxy.conf` that is not backsoon's is never overwritten). NPM applies it at its next reload: save any proxy host or restart NPM. |
+| `BACKSOON_NPM_INTERCEPT_503` | `true` | `false` installs the variant that leaves application `503` responses alone (intercepts only `502` and `504`). |
 | `BACKSOON_PROXY_NETWORK` | `proxy` | Name of the existing external Docker network shared with NPM, for example an NPM network such as `npm-nw`. |
 | `BACKSOON_TRUSTED_PROXIES` | none | IP addresses or CIDR ranges, separated by commas or spaces, allowed to set the `X-Real-IP` header that keys the login rate limit; set it to the `proxy` network range, for example `172.18.0.0/16`. A peer outside the list is limited by its own address. Unset, the panel believes `X-Real-IP` from any peer. An invalid entry stops the panel at start. |
 
@@ -99,7 +103,7 @@ The provisional `default.html` is rendered from `templates/maintenance.html` by 
 
 3. **Generate the session secret**, for example `openssl rand -hex 32`.
 
-4. **Publish the panel through NPM** with a proxy host such as `backsoon.example.com` → `backsoon-admin:8080`, with SSL. The panel publishes no ports, its session cookie is `Secure`, and it trusts the `X-Real-IP` header that NPM sets for the login rate limit (5 failed attempts per IP every 15 minutes). Without `BACKSOON_TRUSTED_PROXIES` the panel accepts that header from any peer, so any container attached to the `proxy` network could forge it and bypass the limit (bcrypt remains the brake). Set `BACKSOON_TRUSTED_PROXIES` to the `proxy` network range, which `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` prints, so only that network can set it; the panel logs the trusted ranges at start. NPM's own address can change between restarts, so prefer the network range to a single address. Keep only trusted containers on that network either way. Behind a CDN, all visitors may share one address, so a few failed logins can lock out the administrator for 15 minutes. An NPM Access List or a LAN/VPN-only host adds another layer.
+4. **Publish the panel through NPM** with a proxy host such as `backsoon.example.com` → `backsoon-admin:8080`, with SSL. The session cookie is `Secure`, so the panel signs in only over HTTPS or on `http://localhost`: its published host port (`127.0.0.1:8181` by default, see `BACKSOON_ADMIN_HOST_BIND`) is meant for an SSH tunnel, not plain `http://` access. Requests to that port reach the panel from the network's gateway address, which the recommended `BACKSOON_TRUSTED_PROXIES` range includes, so whoever can reach the port can also set `X-Real-IP`: keep it on `127.0.0.1`. The panel trusts the `X-Real-IP` header that NPM sets for the login rate limit (5 failed attempts per IP every 15 minutes). Without `BACKSOON_TRUSTED_PROXIES` the panel accepts that header from any peer, so any container attached to the `proxy` network could forge it and bypass the limit (bcrypt remains the brake). Set `BACKSOON_TRUSTED_PROXIES` to the `proxy` network range, which `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` prints, so only that network can set it; the panel logs the trusted ranges at start. NPM's own address can change between restarts, so prefer the network range to a single address. Keep only trusted containers on that network either way. Behind a CDN, all visitors may share one address, so a few failed logins can lock out the administrator for 15 minutes. An NPM Access List or a LAN/VPN-only host adds another layer.
 
 The panel stores its metadata in the `backsoon_meta` volume (`sites.json` plus the original HTML of each page) and republishes every page from it at start, which repairs an inconsistent `backsoon_pages`. It runs as uid 65532 on a read-only root filesystem with all capabilities dropped; `backsoon-init` hands the pages volume to that user on every deploy. The panel's visual system is described in [DESIGN.md](DESIGN.md).
 
