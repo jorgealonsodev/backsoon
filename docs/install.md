@@ -228,7 +228,21 @@ A clean-host rehearsal of these four steps, with an isolated network and a scrat
 
 - **TLS.** No certificate was issued; the panel was reached over HTTP with the `Secure` cookie sent by hand.
 - **The real NPM and Portainer user interfaces.** The proxy hosts were created through NPM's API, and Portainer was not used; the Portainer steps follow Compose's behaviour, not a run in Portainer.
-- **Production.** Real applications, real redeploys and the manual browser recovery timing (CA-2, CA-7) are still to be validated on the owner's servers (U8).
+- **Production.** Real applications, real redeploys and the manual browser recovery timing (CA-2, CA-7).
+
+The production deploy below covers the first two and part of the third.
+
+### Production (U8)
+
+On the owner's server, deployed as a Portainer Git stack from `main` (`b706071`) with the automatic install:
+
+- **Host.** Ubuntu 24.04 on `aarch64` (Oracle Ampere), Docker 29.8, Portainer EE, NPM `2.15.1` with its own network `npm-nw` (`BACKSOON_PROXY_NETWORK=npm-nw`, `BACKSOON_TRUSTED_PROXIES` set to that network's range). Sites behind Cloudflare.
+- **Deploy and redeploy.** Both images built on the host; *Pull and redeploy* rebuilt them; `backsoon-init` and `backsoon-npm-snippet` exited with code 0 and the snippet log said `installed`; `backsoon` and `backsoon-admin` were healthy, with the panel published on `127.0.0.1:8181` only.
+- **NPM.** The snippet became active at NPM's next reload (saving the panel's proxy host): responses carried `X-Backsoon: 1`. NPM includes it in every proxy host, existing and new.
+- **Panel.** Reached through an NPM proxy host to `backsoon-admin:8080` with a Let's Encrypt certificate and Force SSL; sign-in and page creation worked.
+- **Applications.** A real application stopped behind NPM showed its maintenance page, and the owner confirmed it working.
+
+Not measured: the browser recovery time after an application comes back (CA-2).
 
 ## Differences from the PRD runbook (§13)
 
