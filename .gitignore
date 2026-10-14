@@ -14,3 +14,7 @@ coverage.out
 
 # Local security scan output (pentest reports; never published)
 strix_runs/
+
+# Local editor settings and design-tool scratch questions
+.vscode/
+.impeccable/questions/
