@@ -189,6 +189,25 @@ func TestRunLogsTheTrustedProxies(t *testing.T) {
 	}
 }
 
+// The first line of every start reminds that NPM must reload to apply the fallback.
+func TestRunFirstLogLineRemindsToReloadNPM(t *testing.T) {
+	m := validEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	var stdout, stderr syncBuffer
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, nil, env(m), &stdout, &stderr) }()
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(stdout.String(), "listening") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	first, _, _ := strings.Cut(stdout.String(), "\n")
+	if !strings.Contains(first, "reminder: after installing or updating backsoon, reload Nginx Proxy Manager so it applies server_proxy.conf") {
+		t.Errorf("the first log line must remind to reload NPM: %q", first)
+	}
+}
+
 func TestRunRejectsInvalidTrustedProxies(t *testing.T) {
 	m := validEnv(t)
 	m["BACKSOON_TRUSTED_PROXIES"] = "172.18.0.0/16, not-a-range"

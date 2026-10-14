@@ -48,6 +48,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		return 1
 	}
 	logger := log.New(stdout, "", log.LstdFlags)
+	logger.Print("reminder: after installing or updating backsoon, reload Nginx Proxy Manager so it applies " +
+		"server_proxy.conf: save any proxy host in NPM, restart the NPM container, or run: docker exec <npm> nginx -s reload")
 	if cfg.PlaintextPassword {
 		logger.Printf("warning: %s holds the password in plaintext; set %s to a bcrypt hash instead",
 			config.EnvPassword, config.EnvPasswordHash)
