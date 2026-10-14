@@ -1,8 +1,10 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -217,13 +219,23 @@ func TestLoginRateLimitFallsBackToRemoteAddr(t *testing.T) {
 }
 
 func TestClientIP(t *testing.T) {
-	cases := []struct{ name, remote, realIP, want string }{
-		{"x-real-ip wins", "10.0.0.2:5000", "203.0.113.9", "203.0.113.9"},
-		{"remote host without port", "10.0.0.2:5000", "", "10.0.0.2"},
-		{"garbage x-real-ip is ignored", "10.0.0.2:5000", "not an ip", "10.0.0.2"},
-		{"ipv6", "[2001:db8::1]:443", "", "2001:db8::1"},
-		{"ipv6 x-real-ip is canonical", "10.0.0.2:5000", "2001:DB8:0::1", "2001:db8::1"},
-		{"remote without port", "10.0.0.2", "", "10.0.0.2"},
+	npm := []netip.Prefix{netip.MustParsePrefix("172.18.0.0/16"), netip.MustParsePrefix("fd00::/8")}
+	cases := []struct {
+		name, remote, realIP, want string
+		trusted                    []netip.Prefix
+	}{
+		{"x-real-ip wins", "10.0.0.2:5000", "203.0.113.9", "203.0.113.9", nil},
+		{"remote host without port", "10.0.0.2:5000", "", "10.0.0.2", nil},
+		{"garbage x-real-ip is ignored", "10.0.0.2:5000", "not an ip", "10.0.0.2", nil},
+		{"ipv6", "[2001:db8::1]:443", "", "2001:db8::1", nil},
+		{"ipv6 x-real-ip is canonical", "10.0.0.2:5000", "2001:DB8:0::1", "2001:db8::1", nil},
+		{"remote without port", "10.0.0.2", "", "10.0.0.2", nil},
+		{"trusted peer: x-real-ip wins", "172.18.0.3:5000", "203.0.113.9", "203.0.113.9", npm},
+		{"trusted ipv6 peer: x-real-ip wins", "[fd00::3]:5000", "203.0.113.9", "203.0.113.9", npm},
+		{"trusted ipv4-mapped peer: x-real-ip wins", "[::ffff:172.18.0.3]:5000", "203.0.113.9", "203.0.113.9", npm},
+		{"untrusted peer: x-real-ip is ignored", "172.19.0.4:5000", "203.0.113.9", "172.19.0.4", npm},
+		{"untrusted peer without port", "172.19.0.4", "203.0.113.9", "172.19.0.4", npm},
+		{"trusted peer, garbage x-real-ip", "172.18.0.3:5000", "not an ip", "172.18.0.3", npm},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -232,11 +244,33 @@ func TestClientIP(t *testing.T) {
 			if c.realIP != "" {
 				r.Header.Set("X-Real-IP", c.realIP)
 			}
-			if got := clientIP(r); got != c.want {
+			if got := clientIP(r, c.trusted); got != c.want {
 				t.Fatalf("clientIP = %q, want %q", got, c.want)
 			}
 		})
 	}
+}
+
+// A peer outside BACKSOON_TRUSTED_PROXIES cannot dodge the limit by forging X-Real-IP.
+func TestLoginRateLimitIgnoresForgedRealIPFromUntrustedPeer(t *testing.T) {
+	hn := newHarnessTrusting(t, netip.MustParsePrefix("10.0.0.0/8")) // the harness peer is 198.51.100.7
+	for i := 0; i < 5; i++ {
+		wantStatus(t, hn.postLogin(testUser, "bad", fmt.Sprintf("203.0.113.%d", i+1)), http.StatusUnauthorized)
+	}
+	wantStatus(t, hn.postLogin(testUser, testPassword, "203.0.113.99"), http.StatusTooManyRequests)
+	if logs := hn.logs.String(); !strings.Contains(logs, "login blocked ip=198.51.100.7") {
+		t.Fatalf("the block must be keyed on the peer address: %q", logs)
+	}
+}
+
+// A trusted proxy keeps one counter per forwarded client.
+func TestLoginRateLimitUsesRealIPFromTrustedPeer(t *testing.T) {
+	hn := newHarnessTrusting(t, netip.MustParsePrefix("198.51.100.0/24"))
+	for i := 0; i < 5; i++ {
+		hn.postLogin(testUser, "bad", "203.0.113.9")
+	}
+	wantStatus(t, hn.postLogin(testUser, testPassword, "203.0.113.9"), http.StatusTooManyRequests)
+	wantStatus(t, hn.postLogin(testUser, testPassword, "203.0.113.10"), http.StatusSeeOther)
 }
 
 func TestLogout(t *testing.T) {

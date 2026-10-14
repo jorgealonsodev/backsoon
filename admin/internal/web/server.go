@@ -8,7 +8,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/netip"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,6 +30,9 @@ type Options struct {
 	Logger *log.Logger
 	// Now overrides the clock (tests).
 	Now func() time.Time
+	// TrustedProxies are the peers whose X-Real-IP the login rate limit believes; nil means any
+	// peer (see clientIP).
+	TrustedProxies []netip.Prefix
 }
 
 // Server is the panel handler.
@@ -41,6 +46,7 @@ type Server struct {
 	user     string
 	log      *log.Logger
 	now      func() time.Time
+	trusted  []netip.Prefix
 
 	tpl           *template.Template
 	style         template.CSS
@@ -84,6 +90,7 @@ func New(o Options) (http.Handler, error) {
 		user:          o.User,
 		log:           o.Logger,
 		now:           o.Now,
+		trusted:       slices.Clone(o.TrustedProxies),
 		tpl:           tpl,
 		style:         style,
 		uploadBodyMax: pages.MaxHTMLBytes + 320<<10,

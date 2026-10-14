@@ -111,6 +111,7 @@ services:
       BACKSOON_ADMIN_PASSWORD_HASH: "$$2a$$10$$NhwXIb3qXxqiploIKDqNVuStTkKbQBgBWetT1MBojLGaK/2ohvtDy"
       BACKSOON_SESSION_SECRET: backsoon-test-only-session-secret-0123456789abcdef
       BACKSOON_REFRESH: "${BACKSOON_REFRESH:-10}"
+      BACKSOON_TRUSTED_PROXIES: "${BACKSOON_TEST_TRUSTED_PROXIES:-}"
     volumes:
       - pages:/pages
       - meta:/meta

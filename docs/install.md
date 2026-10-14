@@ -70,7 +70,13 @@ Copy [`env.example`](../env.example) to a private `.env` (it is gitignored) and 
 - `BACKSOON_ADMIN_PASSWORD_HASH`: a bcrypt hash of the password.
 - `BACKSOON_SESSION_SECRET`: a random string of at least 32 bytes.
 
-Generate the hash and the secret, and enter the hash with the quoting that keeps its `$` characters intact, by following steps 1 to 3 of [Admin panel](../README.md#admin-panel) in the README. Without a user, a password or hash, and a secret, the panel refuses to start and names the missing variable; `backsoon` keeps serving either way. The remaining variable, `BACKSOON_REFRESH`, is optional (default `10`).
+Generate the hash and the secret, and enter the hash with the quoting that keeps its `$` characters intact, by following steps 1 to 3 of [Admin panel](../README.md#admin-panel) in the README. Without a user, a password or hash, and a secret, the panel refuses to start and names the missing variable; `backsoon` keeps serving either way. The remaining variables are optional: `BACKSOON_REFRESH` (default `10`) and `BACKSOON_TRUSTED_PROXIES`. Set the latter to the `proxy` network range so that only NPM's network can set the client address of the login rate limit:
+
+```sh
+docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
+```
+
+For example `BACKSOON_TRUSTED_PROXIES=172.18.0.0/16`. At start the panel logs `login rate limit: X-Real-IP trusted from 172.18.0.0/16`; an invalid value stops it with a message naming the variable.
 
 ### 2b. Start the stack
 

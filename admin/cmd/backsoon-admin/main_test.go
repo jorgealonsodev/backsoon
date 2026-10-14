@@ -136,6 +136,9 @@ func TestRunServesAndShutsDownGracefully(t *testing.T) {
 	if strings.Contains(logs, "plaintext-pass-1") {
 		t.Error("the warning must not contain the password")
 	}
+	if !strings.Contains(logs, "X-Real-IP trusted from any peer") {
+		t.Errorf("without BACKSOON_TRUSTED_PROXIES the start log must say X-Real-IP is trusted from any peer: %q", logs)
+	}
 
 	cancel()
 	select {
@@ -164,6 +167,36 @@ func TestRunDoesNotWarnWithABcryptHash(t *testing.T) {
 	<-done
 	if strings.Contains(strings.ToLower(stdout.String()), "warning") {
 		t.Errorf("unexpected warning: %q", stdout.String())
+	}
+}
+
+func TestRunLogsTheTrustedProxies(t *testing.T) {
+	m := validEnv(t)
+	m["BACKSOON_TRUSTED_PROXIES"] = "172.18.0.0/16, 10.0.0.5"
+	ctx, cancel := context.WithCancel(context.Background())
+	var stdout, stderr syncBuffer
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, nil, env(m), &stdout, &stderr) }()
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(stdout.String(), "listening") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if !strings.Contains(stdout.String(), "X-Real-IP trusted from 172.18.0.0/16, 10.0.0.5/32") {
+		t.Errorf("the start log must name the trusted proxies: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunRejectsInvalidTrustedProxies(t *testing.T) {
+	m := validEnv(t)
+	m["BACKSOON_TRUSTED_PROXIES"] = "172.18.0.0/16, not-a-range"
+	var stdout, stderr syncBuffer
+	if code := run(context.Background(), nil, env(m), &stdout, &stderr); code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "BACKSOON_TRUSTED_PROXIES") {
+		t.Errorf("stderr must name the variable: %q", stderr.String())
 	}
 }
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -153,5 +154,38 @@ func TestPathOverrides(t *testing.T) {
 	}
 	if cfg.Listen != ":9000" || cfg.PagesDir != "/p" || cfg.MetaDir != "/m" || cfg.TemplatePath != "/t.html" {
 		t.Fatalf("overrides ignored: %+v", cfg)
+	}
+}
+
+func TestTrustedProxies(t *testing.T) {
+	h := mustHash(t, "pw")
+	base := func(v string) map[string]string {
+		return map[string]string{EnvUser: "a", EnvPasswordHash: h, EnvSessionSecret: secret, EnvTrustedProxies: v}
+	}
+	cfg, err := Load(env(base("")))
+	if err != nil || cfg.TrustedProxies != nil {
+		t.Fatalf("unset: want nil (trust X-Real-IP from any peer), got %v %v", cfg.TrustedProxies, err)
+	}
+	cfg, err = Load(env(base(" 172.18.0.1/16, 10.0.0.5\t2001:DB8::/32,,::ffff:192.0.2.7\r\n")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []netip.Prefix{
+		netip.MustParsePrefix("172.18.0.0/16"), netip.MustParsePrefix("10.0.0.5/32"),
+		netip.MustParsePrefix("2001:db8::/32"), netip.MustParsePrefix("192.0.2.7/32"),
+	}
+	if len(cfg.TrustedProxies) != len(want) {
+		t.Fatalf("TrustedProxies = %v, want %v", cfg.TrustedProxies, want)
+	}
+	for i := range want {
+		if cfg.TrustedProxies[i] != want[i] {
+			t.Fatalf("TrustedProxies = %v, want %v", cfg.TrustedProxies, want)
+		}
+	}
+	for _, bad := range []string{"nope", "10.0.0.0/33", "10.0.0.0/8, 300.1.1.1", "fe80::1%eth0", "172.18.0.0/", ","} {
+		_, err := Load(env(base(bad)))
+		if err == nil || !strings.Contains(err.Error(), EnvTrustedProxies) {
+			t.Errorf("%q should be rejected naming %s, got %v", bad, EnvTrustedProxies, err)
+		}
 	}
 }

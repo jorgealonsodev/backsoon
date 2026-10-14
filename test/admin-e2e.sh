@@ -266,6 +266,7 @@ cred_case 'without BACKSOON_ADMIN_USER' BACKSOON_ADMIN_USER -e BACKSOON_ADMIN_PA
 cred_case 'without any password' BACKSOON_ADMIN_PASSWORD_HASH -e BACKSOON_ADMIN_USER=admin -e "BACKSOON_SESSION_SECRET=$SECRET"
 cred_case 'without BACKSOON_SESSION_SECRET' BACKSOON_SESSION_SECRET -e BACKSOON_ADMIN_USER=admin -e BACKSOON_ADMIN_PASSWORD=pw-for-test
 cred_case 'with a 5-byte BACKSOON_SESSION_SECRET' BACKSOON_SESSION_SECRET -e BACKSOON_ADMIN_USER=admin -e BACKSOON_ADMIN_PASSWORD=pw-for-test -e BACKSOON_SESSION_SECRET=short
+cred_case 'with an invalid BACKSOON_TRUSTED_PROXIES' BACKSOON_TRUSTED_PROXIES -e BACKSOON_ADMIN_USER=admin -e BACKSOON_ADMIN_PASSWORD=pw-for-test -e "BACKSOON_SESSION_SECRET=$SECRET" -e BACKSOON_TRUSTED_PROXIES=not-a-range
 
 section 'login through the real form'
 anon /login
@@ -699,6 +700,36 @@ expect_eq 'the old cookie after logout -> 303' 303 "$STATUS"
 expect_eq 'the old cookie after logout is sent to /login' /login "$(header_value Location)"
 panel / -H 'Accept: */*'
 expect_eq 'the old cookie after logout, bare client -> 401' 401 "$STATUS"
+
+section 'BACKSOON_TRUSTED_PROXIES: X-Real-IP is believed only from the listed peers'
+# NPM's address on the network it shares with the panel: the peer the panel sees.
+npm_peer=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{$v.IPAddress}}{{"\n"}}{{end}}' "$(dc ps -q npm)" |
+  awk '$1 ~ /_testnet$/ { print $2 }')
+[ -n "$npm_peer" ] || die 'cannot find the NPM address on the test network'
+[ "$npm_peer" != "$client_ip" ] || die 'the NPM address equals the forwarded client address: the check would prove nothing'
+# with_trusted VALUE: recreate the panel with BACKSOON_TRUSTED_PROXIES=VALUE and sign in once.
+with_trusted() {
+  BACKSOON_TEST_TRUSTED_PROXIES=$1 dc up -d --no-deps --force-recreate backsoon-admin || die 'cannot recreate the panel'
+  reload
+  wait_for 'recreated panel healthy' "$BACKSOON_TEST_WAIT" panel_healthy
+  wait_for 'recreated panel through NPM' "$BACKSOON_TEST_WAIT" panel_up
+  anon /login
+  LOGIN_COOKIE=$(set_cookie_value backsoon_login)
+  LOGIN_TOKEN=$(field_value login_token)
+  [ -n "$LOGIN_COOKIE" ] && [ -n "$LOGIN_TOKEN" ] || die 'recreated panel: login form lacks its token'
+  try_login admin "$PASSWORD"
+  login_status=$STATUS
+  trusted_logs=$(dc logs --no-log-prefix backsoon-admin 2>&1)
+  logged_ip=$(printf '%s\n' "$trusted_logs" | sed -n 's/.*login ok.* ip=\([0-9a-f.:]*\).*/\1/p' | tail -n 1)
+}
+with_trusted 192.0.2.0/24
+expect_eq 'NPM outside the trusted range: login -> 303' 303 "$login_status"
+expect_has 'the start log names the trusted range' "$trusted_logs" 'X-Real-IP trusted from 192.0.2.0/24'
+expect_eq 'NPM outside the trusted range: the limiter keys on the NPM address' "$npm_peer" "$logged_ip"
+with_trusted "$npm_peer"
+expect_eq 'NPM trusted: login -> 303' 303 "$login_status"
+expect_has 'the start log names the trusted address' "$trusted_logs" "X-Real-IP trusted from $npm_peer/32"
+expect_eq 'NPM trusted: the limiter keys on the X-Real-IP that NPM forwarded' "$client_ip" "$logged_ip"
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]

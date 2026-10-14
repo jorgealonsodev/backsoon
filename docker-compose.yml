@@ -64,6 +64,7 @@ services:
       BACKSOON_ADMIN_PASSWORD: ${BACKSOON_ADMIN_PASSWORD:-}
       BACKSOON_SESSION_SECRET: ${BACKSOON_SESSION_SECRET:-}
       BACKSOON_REFRESH: ${BACKSOON_REFRESH:-10}
+      BACKSOON_TRUSTED_PROXIES: ${BACKSOON_TRUSTED_PROXIES:-}
     volumes:
       - backsoon_pages:/pages
       - backsoon_meta:/meta

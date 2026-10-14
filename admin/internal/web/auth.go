@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -109,7 +110,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := clientIP(r)
+	ip := clientIP(r, s.trusted)
 	user := r.PostFormValue("user")
 	allowed, wait := s.limiter.Attempt(ip)
 	if !allowed {
@@ -147,7 +148,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 	}
 	s.sessions.Revoke(sess)
 	http.SetCookie(w, s.sessions.ExpiredCookie())
-	s.log.Printf("logout ip=%s", clientIP(r))
+	s.log.Printf("logout ip=%s", clientIP(r, s.trusted))
 	setSecurityHeaders(w.Header())
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -164,21 +165,35 @@ func waitText(d time.Duration) string {
 	return fmt.Sprintf("%d minutes", minutes)
 }
 
-// clientIP is the key of the login limiter: X-Real-IP, which Nginx Proxy Manager sets and
-// overwrites (the panel publishes no port, so nothing else can reach it), else the host of the
-// connection's remote address.
-func clientIP(r *http.Request) string {
-	if v := strings.TrimSpace(r.Header.Get("X-Real-IP")); v != "" {
-		if ip := net.ParseIP(v); ip != nil {
-			return ip.String()
-		}
-	}
+// clientIP is the key of the login limiter: the address of the connection's peer, unless that
+// peer is a trusted proxy, in which case X-Real-IP, which Nginx Proxy Manager sets and
+// overwrites. A nil trusted list trusts every peer (BACKSOON_TRUSTED_PROXIES unset): the panel
+// publishes no port, but any container on its network could then forge X-Real-IP.
+func clientIP(r *http.Request, trusted []netip.Prefix) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.String()
+	peer, peerErr := netip.ParseAddr(host)
+	peer = peer.Unmap()
+	if trusted == nil || (peerErr == nil && containsAddr(trusted, peer)) {
+		if v := strings.TrimSpace(r.Header.Get("X-Real-IP")); v != "" {
+			if ip := net.ParseIP(v); ip != nil {
+				return ip.String()
+			}
+		}
+	}
+	if peerErr == nil {
+		return peer.String()
 	}
 	return host
+}
+
+func containsAddr(prefixes []netip.Prefix, addr netip.Addr) bool {
+	for _, p := range prefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }

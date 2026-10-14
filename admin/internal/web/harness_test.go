@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -84,6 +85,17 @@ func newHarness(t *testing.T) *harness {
 
 func newHarnessWith(t *testing.T, failPub error) *harness {
 	t.Helper()
+	return buildHarness(t, failPub, nil)
+}
+
+// newHarnessTrusting builds a harness whose panel trusts X-Real-IP only from the given peers.
+func newHarnessTrusting(t *testing.T, trusted ...netip.Prefix) *harness {
+	t.Helper()
+	return buildHarness(t, nil, trusted)
+}
+
+func buildHarness(t *testing.T, failPub error, trusted []netip.Prefix) *harness {
+	t.Helper()
 	dir := t.TempDir()
 	hn := &harness{
 		t:        t,
@@ -114,7 +126,7 @@ func newHarnessWith(t *testing.T, failPub error) *harness {
 	}
 	h, err := New(Options{
 		Store: store, User: testUser, PasswordHash: hash, SessionSecret: testSecret,
-		Logger: log.New(hn.logs, "", 0), Now: hn.clock.Now,
+		Logger: log.New(hn.logs, "", 0), Now: hn.clock.Now, TrustedProxies: trusted,
 	})
 	if err != nil {
 		t.Fatal(err)

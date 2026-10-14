@@ -7,8 +7,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -33,6 +35,9 @@ const (
 	EnvMetaDir = "BACKSOON_META_DIR"
 	// EnvTemplate is the maintenance page template (default "/usr/share/backsoon/maintenance.html").
 	EnvTemplate = "BACKSOON_TEMPLATE"
+	// EnvTrustedProxies lists the IP addresses or CIDR ranges allowed to set X-Real-IP, the client
+	// address of the login rate limit (optional; unset trusts X-Real-IP from any peer).
+	EnvTrustedProxies = "BACKSOON_TRUSTED_PROXIES"
 )
 
 // MinSecretBytes is the minimum length of the session secret.
@@ -67,6 +72,9 @@ type Config struct {
 	PagesDir     string
 	MetaDir      string
 	TemplatePath string
+	// TrustedProxies are the peers whose X-Real-IP header the login rate limit believes. Nil means
+	// any peer (EnvTrustedProxies unset); a peer outside a non-nil list is keyed on its own address.
+	TrustedProxies []netip.Prefix
 }
 
 // Load reads the configuration through getenv (usually os.Getenv). All problems found are
@@ -104,6 +112,12 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, err)
 	}
 	cfg.Refresh = refresh
+
+	trusted, err := ParseTrustedProxies(getenv(EnvTrustedProxies))
+	if err != nil {
+		errs = append(errs, err)
+	}
+	cfg.TrustedProxies = trusted
 
 	if len(errs) > 0 {
 		return Config{}, errors.Join(errs...)
@@ -146,6 +160,48 @@ func ParseRefresh(value string) (int, error) {
 		return DefaultRefresh, fmt.Errorf("%s must be an integer between 1 and 99999", EnvRefresh)
 	}
 	return n, nil
+}
+
+// ParseTrustedProxies reads a list of IP addresses and CIDR ranges separated by commas or white
+// space.
+// A single address becomes a one-address range; host bits of a range are cleared. A blank value
+// yields nil. Errors name the position of the bad entry, not its text.
+func ParseTrustedProxies(value string) ([]netip.Prefix, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	entries := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("%s must list IP addresses or CIDR ranges, for example 172.18.0.0/16", EnvTrustedProxies)
+	}
+	prefixes := make([]netip.Prefix, 0, len(entries))
+	for i, entry := range entries {
+		prefix, ok := parseTrustedEntry(entry)
+		if !ok {
+			return nil, fmt.Errorf("%s: entry %d is not an IP address or CIDR range (for example 172.18.0.0/16)", EnvTrustedProxies, i+1)
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	return prefixes, nil
+}
+
+func parseTrustedEntry(entry string) (netip.Prefix, bool) {
+	if strings.Contains(entry, "/") {
+		prefix, err := netip.ParsePrefix(entry)
+		if err != nil {
+			return netip.Prefix{}, false
+		}
+		if prefix.Addr().Is4In6() && prefix.Bits() >= 96 {
+			prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+		}
+		return prefix.Masked(), true
+	}
+	addr, err := netip.ParseAddr(entry)
+	if err != nil || addr.Zone() != "" {
+		return netip.Prefix{}, false
+	}
+	addr = addr.Unmap()
+	return netip.PrefixFrom(addr, addr.BitLen()), true
 }
 
 func withDefault(value, def string) string {

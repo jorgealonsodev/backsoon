@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,6 +52,17 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 			config.EnvPassword, config.EnvPasswordHash)
 	}
 
+	if cfg.TrustedProxies == nil {
+		logger.Printf("login rate limit: X-Real-IP trusted from any peer; set %s to the proxy network range",
+			config.EnvTrustedProxies)
+	} else {
+		ranges := make([]string, len(cfg.TrustedProxies))
+		for i, p := range cfg.TrustedProxies {
+			ranges[i] = p.String()
+		}
+		logger.Printf("login rate limit: X-Real-IP trusted from %s", strings.Join(ranges, ", "))
+	}
+
 	store, err := pages.Open(pages.Options{
 		MetaDir:      cfg.MetaDir,
 		PagesDir:     cfg.PagesDir,
@@ -63,11 +75,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		return 1
 	}
 	handler, err := web.New(web.Options{
-		Store:         store,
-		User:          cfg.User,
-		PasswordHash:  cfg.PasswordHash,
-		SessionSecret: cfg.SessionSecret,
-		Logger:        logger,
+		Store:          store,
+		User:           cfg.User,
+		PasswordHash:   cfg.PasswordHash,
+		SessionSecret:  cfg.SessionSecret,
+		Logger:         logger,
+		TrustedProxies: cfg.TrustedProxies,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "backsoon-admin: %v\n", err)
