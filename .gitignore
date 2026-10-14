@@ -11,3 +11,6 @@ coverage.out
 # Verifier scratch artifacts (not source)
 .odd-checks/
 .playwright-mcp/
+
+# Local security scan output (pentest reports; never published)
+strix_runs/
