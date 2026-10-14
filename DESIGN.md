@@ -29,7 +29,7 @@ The visitor-facing maintenance page (`templates/maintenance.html`) is a separate
 
 ## Components
 
-- **Header:** mark and wordmark left; right, the navigation links (**Users**, owner only, and **My password**), the ES / EN switch, the signed-in user and Sign out (POST with CSRF). The links are plain muted text that gets the surface tint on hover; the current one carries `aria-current="page"` and the orange tint. The group wraps instead of scrolling on narrow screens.
+- **Header:** mark and wordmark left; right, the ES / EN switch, the signed-in user's name with a chevron, and Sign out (POST with CSRF). The name opens the account menu (**My password**, and **Users** for the owner only) without script: on hover, while focus is inside it, or when the name is clicked (details/summary, for touch and Safari). The menu is a popover list like the row menu; the current entry carries `aria-current="page"` and the orange tint. The group wraps instead of scrolling on narrow screens.
 - **Card:** white surface with a 2–3px orange top status line, header (title + tools), body, and a grey footer for actions or hints. Never nested.
 - **Pages table:** small uppercase column heads (NAME, DESTINATIONS, PREVIEW). Each row shows the page name with "Updated …" beneath, destination chips, a Preview button and a `details`/`summary` actions menu (Edit, Preview full size, Delete). The default page is always last, with an "Everything else" chip and no delete.
 - **Destination chip:** light mono chip with a globe icon (domain) or a server icon (service:port); the type is also visually-hidden text.

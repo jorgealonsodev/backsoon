@@ -23,12 +23,18 @@
 <div class="container navbar-inner">
 <a class="brand" href="/">{{template "logo"}}<span>backsoon</span></a>
 <div class="navbar-end">
-<nav class="navlinks" aria-label="{{t "nav.label"}}">
-{{- if .Owner}}<a href="/users"{{if eq .Nav "users"}} aria-current="page"{{end}}>{{t "nav.users"}}</a>{{end}}
-<a href="/account"{{if eq .Nav "account"}} aria-current="page"{{end}}>{{t "nav.account"}}</a>
-</nav>
 {{template "langswitch" .}}
-<span class="who">{{.Who}}</span>
+<div class="usermenu">
+<details class="usermenu-toggle">
+<summary><span class="who">{{.Who}}</span><svg class="icon caret" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 10 5 5 5-5"/></svg></summary>
+</details>
+<ul class="usermenu-list" aria-label="{{t "nav.label"}}">
+<li><a href="/account"{{if eq .Nav "account"}} aria-current="page"{{end}}>{{t "nav.account"}}</a></li>
+{{- if .Owner}}
+<li><a href="/users"{{if eq .Nav "users"}} aria-current="page"{{end}}>{{t "nav.users"}}</a></li>
+{{- end}}
+</ul>
+</div>
 <form class="inline-form" method="post" action="/logout">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <button class="btn" type="submit">{{t "nav.signout"}}</button>

@@ -118,11 +118,32 @@ main.container { padding-block: 1.5rem 3rem; }
 .navbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3.5rem; }
 .brand { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--text); font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
 .navbar-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.25rem 0.75rem; min-width: 0; }
-.navlinks { display: inline-flex; align-items: center; gap: 0.125rem; font-size: 0.875rem; font-weight: 500; }
-.navlinks a { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.55rem; border-radius: var(--radius); color: var(--muted); text-decoration: none; }
-.navlinks a:hover { color: var(--text); background: var(--surface-2); }
-.navlinks a[aria-current="page"] { color: var(--accent-text); background: var(--accent-tint); }
-.who { min-width: 0; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.875rem; }
+/* Account menu under the signed-in name. No script (CSP): it opens on hover, while focus is inside
+   it (keyboard), or when the name is clicked (details/summary, for touch and for Safari, which does
+   not focus a clicked button). */
+.usermenu { position: relative; display: inline-flex; }
+.usermenu-toggle summary {
+  display: inline-flex; align-items: center; gap: 0.2rem; min-height: 2rem; padding: 0 0.4rem 0 0.55rem;
+  border-radius: var(--radius); color: var(--muted); cursor: pointer; list-style: none;
+  transition: background-color 0.15s ease-out, color 0.15s ease-out;
+}
+.usermenu-toggle summary::-webkit-details-marker { display: none; }
+.usermenu:hover summary, .usermenu-toggle[open] summary { background: var(--surface-2); color: var(--text); }
+.usermenu .caret { width: 1rem; height: 1rem; }
+.who { min-width: 0; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; }
+.usermenu-list {
+  display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 11rem; margin: 0; padding: 0.25rem;
+  list-style: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-pop);
+}
+/* Bridges the 4px gap so the pointer can travel from the name to the list without closing it. */
+.usermenu-list::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 6px; }
+.usermenu:hover .usermenu-list, .usermenu:focus-within .usermenu-list, .usermenu-toggle[open] + .usermenu-list { display: block; }
+.usermenu-list a {
+  display: flex; align-items: center; width: 100%; padding: 0.5rem 0.7rem; border-radius: 4px;
+  color: var(--text); font-size: 0.875rem; text-decoration: none;
+}
+.usermenu-list a:hover { background: var(--surface-2); }
+.usermenu-list a[aria-current="page"] { color: var(--accent-text); background: var(--accent-tint); }
 .inline-form { display: inline; }
 .lang { display: inline-flex; align-items: center; gap: 0.125rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.04em; }
 .lang a, .lang-current { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.45rem; border-radius: var(--radius); }
@@ -365,6 +386,8 @@ tr.is-hit td:first-child { box-shadow: inset 1px 0 0 var(--accent); }
   input[type="text"], input[type="search"], input[type="password"], textarea { font-size: 1rem; min-height: 2.75rem; }
   .menu summary { width: 2.75rem; height: 2.75rem; }
   .menu-list a, .menu-list button { min-height: 2.75rem; }
+  .usermenu-toggle summary { min-height: 2.75rem; }
+  .usermenu-list a { min-height: 2.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }

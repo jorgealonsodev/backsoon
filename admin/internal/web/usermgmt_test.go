@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -98,6 +99,40 @@ func TestNavbarShowsUsersOnlyToTheOwner(t *testing.T) {
 		mustContain(t, eb, `<span class="who">alice</span>`, `href="/account"`)
 		mustNotContain(t, eb, `href="/users"`)
 	}
+}
+
+// The account links live in a menu under the signed-in name. It opens without JavaScript: on
+// hover, on keyboard focus, or by clicking the name (details/summary, for touch and Safari).
+func TestAccountLinksOpenFromTheUserName(t *testing.T) {
+	hn := newHarness(t)
+	hn.addUser("alice", alicePassword)
+	o, e := hn.login(), hn.loginAs("alice", alicePassword)
+	menuRe := regexp.MustCompile(`(?s)<div class="usermenu">\s*<details class="usermenu-toggle">\s*<summary[^>]*><span class="who">([^<]*)</span>.*?</summary>\s*</details>\s*<ul class="usermenu-list"[^>]*>(.*?)</ul>\s*</div>`)
+
+	for who, s := range map[string]session{testUser: o, "alice": e} {
+		for _, p := range []string{"/", "/account"} {
+			body := hn.get(p, s).Body.String()
+			m := menuRe.FindStringSubmatch(body)
+			if m == nil {
+				t.Fatalf("%s %s: no user menu under the name:\n%s", who, p, excerpt(body))
+			}
+			if m[1] != who {
+				t.Errorf("%s %s: menu name = %q", who, p, m[1])
+			}
+			mustContain(t, m[2], `href="/account"`, "My password")
+			if who == testUser {
+				mustContain(t, m[2], `href="/users"`, "Users")
+			} else {
+				mustNotContain(t, body, `href="/users"`)
+			}
+			mustNotContain(t, body, `class="navlinks"`)
+		}
+	}
+	css := hn.get("/", o).Body.String()
+	mustContainRaw(t, css, ".usermenu:hover .usermenu-list", ".usermenu:focus-within .usermenu-list", ".usermenu-toggle[open] + .usermenu-list")
+	r := navigate(httptest.NewRequest(http.MethodGet, "/", nil))
+	r.Header.Set("Accept-Language", "es")
+	mustContain(t, hn.serve(o.apply(r)).Body.String(), "Mi contraseña", "Usuarios")
 }
 
 func TestOwnerCreatesAUser(t *testing.T) {
