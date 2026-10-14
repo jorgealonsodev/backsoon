@@ -510,7 +510,7 @@ func TestSpanishViews(t *testing.T) {
 	add("warning confirm", hn.postMultipartL("/pages", s, map[string]string{"name": "W", "destinations": "w.test", "source": "upload"},
 		&upload{name: "w.html", data: []byte(`<link href="https://x/a.css"><script>1</script>`)}, es), 200,
 		"Revisa esta página antes de publicarla", "está lista para crearse", "Publicar de todos modos", "Volver y editar", "Advertencia.",
-		"La página hace referencia a recursos externos (&lt;link&gt;)", "La página contiene &lt;script&gt;; los scripts se ejecutarán para los visitantes")
+		"La página hace referencia a recursos externos (&lt;link&gt;)", "La página contiene código ejecutable (&lt;script&gt;); backsoon lo bloquea, así que no se ejecutará para los visitantes")
 	add("conflict confirm", hn.postMultipartL("/pages", s, templateFields("Charlie", "bravo.test, app.test"), nil, es), 409,
 		"¿Mover destinos?", "Mover destinos", "Ahora los muestra", "se quedará sin destinos")
 	add("delete confirm", hn.postFormL("/pages/"+a.ID+"/delete", s, url.Values{}, es), 200,

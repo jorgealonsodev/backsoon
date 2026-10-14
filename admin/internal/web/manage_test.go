@@ -163,7 +163,8 @@ func TestUploadWarningsNeedConfirmationWithoutReupload(t *testing.T) {
 		&upload{name: "ext.html", data: []byte(html)})
 	wantStatus(t, w, http.StatusOK)
 	body := w.Body.String()
-	mustContain(t, body, `data-view="confirm-warnings"`, "external resources", "&lt;script&gt;", "Publish anyway")
+	mustContain(t, body, `data-view="confirm-warnings"`, "external resources",
+		"The page contains script-capable markup (&lt;script&gt;); backsoon blocks it, so it will not run for visitors", "Publish anyway")
 	if len(hn.store.List()) != 1 {
 		t.Fatal("nothing is created before confirmation")
 	}

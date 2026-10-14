@@ -2,7 +2,9 @@ package pages
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -41,6 +43,66 @@ func TestValidateHTMLWarnings(t *testing.T) {
 		{"url http", `<div style="background:url(http://x/y.png)">`, 1, "external"},
 		{"url https quoted", `<div style="background:URL( 'https://x/y.png' )">`, 1, "external"},
 		{"data uri is fine", `<img src="data:image/png;base64,AAAA"><div style="background:url(data:image/png;base64,AA)">`, 0, ""},
+	}
+	// Script-capable shapes (Strix a047): each is one script warning that names its kind and says
+	// the script is blocked for visitors.
+	scriptShapes := []struct{ name, html, kind string }{
+		{"onerror", `<img src=x onerror=alert(1)>`, "inline event handler"},
+		{"onload", `<svg onload=alert(1)>`, "inline event handler"},
+		{"onload after slash", `<svg/onload=alert(1)>`, "inline event handler"},
+		{"onfocus", `<input autofocus onfocus=alert(1)>`, "inline event handler"},
+		{"ontoggle", `<details open ontoggle="alert(1)">`, "inline event handler"},
+		{"onbegin", `<svg><animate onbegin=alert(1) attributeName=x dur=1s>`, "inline event handler"},
+		{"onplay", `<video autoplay onplay=alert(1)>`, "inline event handler"},
+		{"onstart", `<marquee onstart=alert(1)>x</marquee>`, "inline event handler"},
+		{"onchange", `<select ONCHANGE='alert(1)'><option>a</select>`, "inline event handler"},
+		{"onmouseenter", `<div onmouseenter = "alert(1)">x</div>`, "inline event handler"},
+		{"script newline", "<script\n>alert(1)</script>", "<script>"},
+		{"script slash", `<script/x>alert(1)</script>`, "<script>"},
+		{"iframe srcdoc", `<iframe srcdoc="<svg onload=alert(1)>"></iframe>`, "<iframe>, <object>, <embed> or <base>"},
+		{"embed svg", `<embed type="image/svg+xml" src="data:image/svg+xml,x">`, "<iframe>, <object>, <embed> or <base>"},
+		{"base javascript", `<base href="javascript:alert(1)//">`, "javascript: URL"},
+		{"form action", `<form action="javascript:alert(1)"><button>x</button></form>`, "javascript: URL"},
+		{"meta refresh", `<meta http-equiv=refresh content="0;url=javascript:alert(1)">`, "javascript: URL"},
+		{"meta refresh entity", `<meta http-equiv="refresh" content="0;url=javascript&#58;alert(1)">`, "javascript: URL"},
+		{"hex entity colon", `<a href="javascript&#x3A;alert(1)">x</a>`, "javascript: URL"},
+		{"named entity colon", `<a href="javascript&colon;alert(1)">x</a>`, "javascript: URL"},
+		{"anchor", `<a href=" JavaScript:alert(1)">x</a>`, "javascript: URL"},
+		{"table background", `<table background="javascript:alert(1)"><tr><td>x</table>`, "javascript: URL"},
+		{"isindex", `<isindex action="javascript:alert(1)">`, "javascript: URL"},
+		{"noscript meta refresh", `<noscript><meta http-equiv=refresh content="0;url=javascript:alert(1)"></noscript>`, "javascript: URL"},
+		{"css url", `<div style="background:url( 'javascript:alert(1)' )">x</div>`, "javascript: URL"},
+	}
+	for _, tc := range scriptShapes {
+		t.Run("script-capable "+tc.name, func(t *testing.T) {
+			ws, err := Inspect([]byte(tc.html))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ws) != 1 || ws[0].Code != WarningScript {
+				t.Fatalf("got %v, want one script warning", ws)
+			}
+			if !slices.Contains(ws[0].Detail, tc.kind) {
+				t.Fatalf("script warning detail %q lacks %q", ws[0].Detail, tc.kind)
+			}
+			want := fmt.Sprintf(WarnScript, strings.Join(ws[0].Detail, ", "))
+			if got := ws[0].String(); got != want || !strings.Contains(got, "will not run for visitors") {
+				t.Fatalf("warning text %q, want %q saying it will not run", got, want)
+			}
+		})
+	}
+	// Look-alikes that are not script-capable stay warning-free.
+	for name, html := range map[string]string{
+		"words starting with on":   `<p class="once" data-online="1">Online soon</p>`,
+		"handler text outside tag": `<p>&lt;img onerror=alert(1)&gt; is shown as text</p>`,
+		"numeric meta refresh":     `<meta http-equiv="refresh" content="10">`,
+		"inline svg":               `<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0h10v10z"/></svg>`,
+	} {
+		t.Run("not script-capable "+name, func(t *testing.T) {
+			if ws, err := Inspect([]byte(html)); err != nil || len(ws) != 0 {
+				t.Fatalf("got %v, %v; want no warning", ws, err)
+			}
+		})
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

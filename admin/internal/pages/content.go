@@ -24,7 +24,7 @@ var (
 // Warning texts returned by ValidateHTML.
 const (
 	WarnExternalResources = "The page references external resources (%s); backsoon pages should be self-contained"
-	WarnScript            = "The page contains <script>; scripts will run for visitors"
+	WarnScript            = "The page contains script-capable markup (%s); backsoon blocks it, so it will not run for visitors"
 )
 
 var (
@@ -39,6 +39,21 @@ var (
 	}{
 		{scriptSrcRe, "<script src>"}, {linkRe, "<link>"}, {importRe, "@import"}, {urlHTTPRe, "url(http…)"},
 	}
+
+	// Script-capable markup. Advisory only: the CSP on every maintenance response is what keeps
+	// it from running, so these favour catching variants over precision.
+	handlerRe = regexp.MustCompile(`(?i)<[a-z][^>]*[\s/"']on[a-z]+\s*=`)
+	// javascript followed by a colon, raw or as an entity (&#58; &#x3a; &colon;), anywhere: URLs
+	// in attributes, meta refresh and CSS url().
+	jsURLRe       = regexp.MustCompile(`(?i)javascript\s*(?::|&#0*58;?|&#x0*3a;?|&colon;)`)
+	embedRe       = regexp.MustCompile(`(?i)<(?:iframe|frame|object|embed|applet|base)\b`)
+	scriptCapable = []struct {
+		re   *regexp.Regexp
+		name string
+	}{
+		{scriptRe, "<script>"}, {handlerRe, "inline event handler"}, {jsURLRe, "javascript: URL"},
+		{embedRe, "<iframe>, <object>, <embed> or <base>"},
+	}
 )
 
 // WarningCode is the stable code of a content warning.
@@ -50,8 +65,8 @@ const (
 	WarningScript            WarningCode = "script"
 )
 
-// Warning is a non-blocking finding in a page. Detail lists what was found (for
-// WarningExternalResources, the kinds of reference); String is the English text.
+// Warning is a non-blocking finding in a page. Detail lists the kinds found (references for
+// WarningExternalResources, script-capable markup for WarningScript); String is the English text.
 type Warning struct {
 	Code   WarningCode
 	Detail []string
@@ -61,7 +76,7 @@ func (w Warning) String() string {
 	if w.Code == WarningExternalResources {
 		return fmt.Sprintf(WarnExternalResources, strings.Join(w.Detail, ", "))
 	}
-	return WarnScript
+	return fmt.Sprintf(WarnScript, strings.Join(w.Detail, ", "))
 }
 
 // Inspect is ValidateHTML with structured warnings, for callers that show them in another
@@ -84,14 +99,20 @@ func Inspect(data []byte) (warnings []Warning, err error) {
 	if len(found) > 0 {
 		warnings = append(warnings, Warning{Code: WarningExternalResources, Detail: found})
 	}
-	if scriptRe.Match(data) {
-		warnings = append(warnings, Warning{Code: WarningScript})
+	var scripts []string
+	for _, k := range scriptCapable {
+		if k.re.Match(data) {
+			scripts = append(scripts, k.name)
+		}
+	}
+	if len(scripts) > 0 {
+		warnings = append(warnings, Warning{Code: WarningScript, Detail: scripts})
 	}
 	return warnings, nil
 }
 
 // ValidateHTML rejects pages that are empty, not UTF-8 or over MaxHTMLBytes, and returns
-// non-blocking warnings (RF-17): external resources (RF-11) and any <script>.
+// non-blocking warnings (RF-17): external resources (RF-11) and script-capable markup.
 func ValidateHTML(data []byte) (warnings []string, err error) {
 	found, err := Inspect(data)
 	for _, w := range found {

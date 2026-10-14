@@ -194,7 +194,7 @@ var catalogEN = map[string]string{
 	"param.lang.bad":          "Language must be a tag such as \"es\" or \"pt-BR\"",
 	"param.refresh.bad":       "Refresh must be between 1 and 99999 seconds",
 	"warn.external":           "The page references external resources (%s); backsoon pages should be self-contained",
-	"warn.script":             "The page contains <script>; scripts will run for visitors",
+	"warn.script":             "The page contains script-capable markup (%s); backsoon blocks it, so it will not run for visitors",
 
 	// users
 	"nav.label":                   "Main",
@@ -445,7 +445,7 @@ var catalogES = map[string]string{
 	"param.lang.bad":          "El idioma debe ser una etiqueta como \"es\" o \"pt-BR\"",
 	"param.refresh.bad":       "La actualización debe estar entre 1 y 99999 segundos",
 	"warn.external":           "La página hace referencia a recursos externos (%s); las páginas de backsoon deben ser autocontenidas",
-	"warn.script":             "La página contiene <script>; los scripts se ejecutarán para los visitantes",
+	"warn.script":             "La página contiene código ejecutable (%s); backsoon lo bloquea, así que no se ejecutará para los visitantes",
 
 	// users
 	"nav.label":                   "Principal",

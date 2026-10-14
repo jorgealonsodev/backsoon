@@ -23,7 +23,7 @@ One global NPM snippet plus a static nginx: adding an application never touches 
 ## Capabilities and Constraints
 - Single administrator defined by environment variables (user, bcrypt hash or plaintext alternative, session secret); no registration, roles or password recovery.
 - Pages: list (default page always present and undeletable), upload a self-contained .html (max 512 KB, UTF-8) or create from the template (application name, message, language, icon), assign destinations (domain or service:port; one owner per destination, moving requires confirmation), replace HTML, delete (destinations fall back to the default page), sandboxed preview.
-- Warnings, not rejections, for external resources or scripts in uploaded HTML.
+- Warnings, not rejections, for external resources or script-capable markup in uploaded HTML; the Content-Security-Policy on every maintenance response keeps scripts from running for visitors.
 - Atomic publication; changes are visible on the next request.
 - Tech (decided): Go standard library + bcrypt, html/template, embed, distroless/static image; no database; no client-side framework required.
 - Terminology: page, destination (domain or service:port), default page, preview, publish.

@@ -201,7 +201,7 @@ func warningText(loc locale, w pages.Warning) string {
 	if w.Code == pages.WarningExternalResources {
 		return loc.T("warn.external", strings.Join(w.Detail, ", "))
 	}
-	return loc.T("warn.script")
+	return loc.T("warn.script", strings.Join(w.Detail, ", "))
 }
 
 // submit handles POST /pages (id == "") and POST /pages/{id}: validation, the confirmation steps
