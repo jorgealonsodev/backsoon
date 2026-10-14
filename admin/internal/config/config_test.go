@@ -189,3 +189,55 @@ func TestTrustedProxies(t *testing.T) {
 		}
 	}
 }
+
+// The owner's session stamp derives from this fingerprint. A plaintext password is re-hashed with
+// a new salt at every start, so the fingerprint must follow the password, not the hash.
+func TestPasswordFingerprintFollowsThePassword(t *testing.T) {
+	load := func(vars map[string]string) Config {
+		t.Helper()
+		vars[EnvUser], vars[EnvSessionSecret] = "admin", secret
+		cfg, err := Load(env(vars))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	plainA1 := load(map[string]string{EnvPassword: "plain one"})
+	plainA2 := load(map[string]string{EnvPassword: "plain one"})
+	plainB := load(map[string]string{EnvPassword: "plain two"})
+	if string(plainA1.PasswordHash) == string(plainA2.PasswordHash) {
+		t.Fatal("test premise: each load must salt the plaintext differently")
+	}
+	if len(plainA1.PasswordFingerprint) == 0 || string(plainA1.PasswordFingerprint) != string(plainA2.PasswordFingerprint) {
+		t.Fatal("the same plaintext password must give the same fingerprint over restarts")
+	}
+	if string(plainA1.PasswordFingerprint) == string(plainB.PasswordFingerprint) {
+		t.Fatal("a different plaintext password must change the fingerprint")
+	}
+
+	h1, h2 := mustHash(t, "pw"), mustHash(t, "pw")
+	hashA := load(map[string]string{EnvPasswordHash: h1})
+	hashA2 := load(map[string]string{EnvPasswordHash: h1})
+	hashB := load(map[string]string{EnvPasswordHash: h2})
+	if len(hashA.PasswordFingerprint) == 0 || string(hashA.PasswordFingerprint) != string(hashA2.PasswordFingerprint) {
+		t.Fatal("the same hash must give the same fingerprint")
+	}
+	if string(hashA.PasswordFingerprint) == string(hashB.PasswordFingerprint) {
+		t.Fatal("a different hash must change the fingerprint")
+	}
+	if string(hashA.PasswordFingerprint) == string(plainA1.PasswordFingerprint) {
+		t.Fatal("hash and plaintext fingerprints must not collide")
+	}
+	for _, fp := range [][]byte{plainA1.PasswordFingerprint, hashA.PasswordFingerprint} {
+		if strings.Contains(string(fp), "plain one") || strings.Contains(string(fp), h1) {
+			t.Fatal("the fingerprint contains the password or hash")
+		}
+	}
+	keyed, err := Load(env(map[string]string{EnvUser: "admin", EnvPasswordHash: h1, EnvSessionSecret: strings.Repeat("t", 32)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(keyed.PasswordFingerprint) == string(hashA.PasswordFingerprint) {
+		t.Fatal("the fingerprint must depend on the session secret")
+	}
+}

@@ -16,14 +16,21 @@ import (
 
 	"github.com/jorgealonsodev/backsoon/admin/internal/auth"
 	"github.com/jorgealonsodev/backsoon/admin/internal/pages"
+	"github.com/jorgealonsodev/backsoon/admin/internal/users"
 )
 
 // Options configure New.
 type Options struct {
 	Store *pages.Store
-	// User and PasswordHash are the single administrator (see config.Config).
+	// Users are the users added in the panel (see users.Open).
+	Users *users.Store
+	// User and PasswordHash are the owner (see config.Config).
 	User         string
 	PasswordHash []byte
+	// PasswordFingerprint identifies the configured owner password across restarts
+	// (config.Config.PasswordFingerprint); the owner's sessions end when it changes. Empty means
+	// the hash itself.
+	PasswordFingerprint []byte
 	// SessionSecret signs sessions, CSRF tokens and the login form token.
 	SessionSecret []byte
 	// Logger receives the plain-line log (RNF-9). Defaults to log.Default().
@@ -38,12 +45,12 @@ type Options struct {
 // Server is the panel handler.
 type Server struct {
 	store    *pages.Store
-	creds    *auth.Credentials
+	users    *users.Store
+	accounts *auth.Accounts
 	sessions *auth.Manager
 	limiter  *auth.Limiter
 	drafts   *draftStore
 	secret   []byte
-	user     string
 	log      *log.Logger
 	now      func() time.Time
 	trusted  []netip.Prefix
@@ -61,6 +68,8 @@ func New(o Options) (http.Handler, error) {
 	switch {
 	case o.Store == nil:
 		return nil, errors.New("web: a page store is required")
+	case o.Users == nil:
+		return nil, errors.New("web: a user store is required")
 	case o.User == "" || len(o.PasswordHash) == 0:
 		return nil, errors.New("web: the administrator credentials are required")
 	case len(o.SessionSecret) < 16:
@@ -84,14 +93,15 @@ func New(o Options) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	accounts := auth.NewAccounts(o.User, o.PasswordHash, o.PasswordFingerprint, o.SessionSecret, o.Users)
 	s := &Server{
 		store:         o.Store,
-		creds:         auth.NewCredentials(o.User, o.PasswordHash),
-		sessions:      auth.NewManager(o.SessionSecret, o.Now),
+		users:         o.Users,
+		accounts:      accounts,
+		sessions:      auth.NewManager(o.SessionSecret, o.Now, accounts),
 		limiter:       auth.NewLimiter(auth.LoginMaxAttempts, auth.LoginWindow, o.Now),
 		drafts:        newDraftStore(o.Now),
 		secret:        append([]byte(nil), o.SessionSecret...),
-		user:          o.User,
 		log:           o.Logger,
 		now:           o.Now,
 		trusted:       slices.Clone(o.TrustedProxies),
@@ -190,7 +200,7 @@ func (s *Server) sessionOf(r *http.Request) auth.Session {
 }
 
 func (s *Server) base(sess auth.Session, title string) base {
-	return base{Title: title + " · backsoon", Authed: true, Who: s.user, CSRF: s.sessions.CSRFToken(sess)}
+	return base{Title: title + " · backsoon", Authed: true, Who: sess.User, Owner: sess.Owner, CSRF: s.sessions.CSRFToken(sess)}
 }
 
 func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, sess auth.Session, status int, heading, message, backHref, backLabel string) {

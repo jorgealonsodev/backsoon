@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strconv"
@@ -31,6 +32,39 @@ func (c *fakeClock) Advance(d time.Duration) {
 
 var testSecret = []byte(strings.Repeat("k", 32))
 
+// fakeDir is a Directory with settable users: name -> stamp. "root" is the owner.
+type fakeDir struct {
+	mu     sync.Mutex
+	stamps map[string]string
+}
+
+func newDir() *fakeDir {
+	return &fakeDir{stamps: map[string]string{"root": "s-root", "alice": "s-alice-1", "bob": "s-bob-1"}}
+}
+
+func (d *fakeDir) Resolve(user string) (string, bool, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	stamp, ok := d.stamps[user]
+	return stamp, user == "root", ok
+}
+
+func (d *fakeDir) set(user, stamp string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if stamp == "" {
+		delete(d.stamps, user)
+		return
+	}
+	d.stamps[user] = stamp
+}
+
+var (
+	ownerID = Identity{User: "root", Stamp: "s-root", Owner: true}
+	aliceID = Identity{User: "alice", Stamp: "s-alice-1"}
+	bobID   = Identity{User: "bob", Stamp: "s-bob-1"}
+)
+
 func TestCredentials(t *testing.T) {
 	hash, err := bcrypt.GenerateFromPassword([]byte("correct horse"), bcrypt.MinCost)
 	if err != nil {
@@ -57,8 +91,8 @@ func TestCredentials(t *testing.T) {
 
 func TestSessionRoundTrip(t *testing.T) {
 	clk := newClock()
-	m := NewManager(testSecret, clk.Now)
-	s, cookie, err := m.Issue()
+	m := NewManager(testSecret, clk.Now, newDir())
+	s, cookie, err := m.Issue(ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +104,7 @@ func TestSessionRoundTrip(t *testing.T) {
 		t.Fatalf("cookie lifetime wrong: maxage=%d expires=%v", cookie.MaxAge, cookie.Expires)
 	}
 	got, err := m.Verify(cookie.Value)
-	if err != nil || got.ID != s.ID || !got.Expires.Equal(s.Expires) {
+	if err != nil || got.ID != s.ID || !got.Expires.Equal(s.Expires) || got.User != "root" || !got.Owner {
 		t.Fatalf("verify failed: %+v %v", got, err)
 	}
 
@@ -95,28 +129,33 @@ func mustReq(t *testing.T) *http.Request {
 
 func TestSessionRejectsTamperedExpiredMalformed(t *testing.T) {
 	clk := newClock()
-	m := NewManager(testSecret, clk.Now)
-	_, cookie, _ := m.Issue()
+	m := NewManager(testSecret, clk.Now, newDir())
+	_, cookie, _ := m.Issue(ownerID)
 	v := cookie.Value
 	parts := strings.Split(v, ".")
-	if len(parts) != 3 {
+	if len(parts) != 5 {
 		t.Fatalf("unexpected value shape %q", v)
 	}
 	// Extend the expiry without re-signing.
-	forgedExp := parts[0] + ".99999999999." + parts[2]
+	forgedExp := strings.Join([]string{parts[0], "99999999999", parts[2], parts[3], parts[4]}, ".")
 	// Flip a signature character.
-	sig := []byte(parts[2])
+	sig := []byte(parts[4])
 	if sig[0] == 'A' {
 		sig[0] = 'B'
 	} else {
 		sig[0] = 'A'
 	}
-	badSig := parts[0] + "." + parts[1] + "." + string(sig)
-	other := NewManager([]byte(strings.Repeat("z", 32)), clk.Now)
+	badSig := strings.Join(parts[:4], ".") + "." + string(sig)
+	// Another user's name or stamp under the same signature.
+	forgedUser := strings.Join([]string{parts[0], parts[1], base64.RawURLEncoding.EncodeToString([]byte("alice")), parts[3], parts[4]}, ".")
+	forgedStamp := strings.Join([]string{parts[0], parts[1], parts[2], "s-alice-1", parts[4]}, ".")
+	other := NewManager([]byte(strings.Repeat("z", 32)), clk.Now, newDir())
 
 	for name, val := range map[string]string{
 		"forged expiry": forgedExp, "bad signature": badSig, "empty": "", "garbage": "abc",
-		"two parts": parts[0] + "." + parts[1], "four parts": v + ".x", "non numeric exp": parts[0] + ".x." + parts[2],
+		"forged user": forgedUser, "forged stamp": forgedStamp,
+		"two parts": parts[0] + "." + parts[1], "six parts": v + ".x", "non numeric exp": strings.Join([]string{parts[0], "x", parts[2], parts[3], parts[4]}, "."),
+		"user not base64": strings.Join([]string{parts[0], parts[1], "!!", parts[3], parts[4]}, "."),
 	} {
 		if _, err := m.Verify(val); err == nil {
 			t.Errorf("%s: expected rejection", name)
@@ -137,9 +176,9 @@ func TestSessionRejectsTamperedExpiredMalformed(t *testing.T) {
 }
 
 func TestSessionsAreUnique(t *testing.T) {
-	m := NewManager(testSecret, nil)
-	a, _, _ := m.Issue()
-	b, _, _ := m.Issue()
+	m := NewManager(testSecret, nil, newDir())
+	a, _, _ := m.Issue(ownerID)
+	b, _, _ := m.Issue(ownerID)
 	if a.ID == b.ID {
 		t.Fatal("session ids must be random")
 	}
@@ -147,9 +186,9 @@ func TestSessionsAreUnique(t *testing.T) {
 
 func TestRevokedSessionIsRejectedUntilItWouldExpire(t *testing.T) {
 	clk := newClock()
-	m := NewManager(testSecret, clk.Now)
-	a, cookieA, _ := m.Issue()
-	_, cookieB, _ := m.Issue()
+	m := NewManager(testSecret, clk.Now, newDir())
+	a, cookieA, _ := m.Issue(ownerID)
+	_, cookieB, _ := m.Issue(ownerID)
 
 	m.Revoke(a)
 	if _, err := m.Verify(cookieA.Value); !errors.Is(err, ErrInvalidSession) {
@@ -181,7 +220,7 @@ func TestRevokedSessionIsRejectedUntilItWouldExpire(t *testing.T) {
 }
 
 func TestExpiredCookie(t *testing.T) {
-	m := NewManager(testSecret, nil)
+	m := NewManager(testSecret, nil, newDir())
 	c := m.ExpiredCookie()
 	if c.Name != SessionCookieName || c.Value != "" || c.MaxAge >= 0 || !c.HttpOnly || !c.Secure ||
 		c.SameSite != http.SameSiteStrictMode || c.Path != "/" || !c.Expires.Before(time.Now()) {
@@ -190,9 +229,9 @@ func TestExpiredCookie(t *testing.T) {
 }
 
 func TestCSRF(t *testing.T) {
-	m := NewManager(testSecret, nil)
-	a, _, _ := m.Issue()
-	b, _, _ := m.Issue()
+	m := NewManager(testSecret, nil, newDir())
+	a, _, _ := m.Issue(ownerID)
+	b, _, _ := m.Issue(ownerID)
 	tok := m.CSRFToken(a)
 	if tok == "" || tok != m.CSRFToken(a) {
 		t.Fatal("token must be stable per session")
@@ -208,7 +247,7 @@ func TestCSRF(t *testing.T) {
 			t.Errorf("token %q must be rejected", bad)
 		}
 	}
-	if tok == strings.Split(mustCookieValue(t, m, a), ".")[2] {
+	if tok == strings.Split(mustCookieValue(t, m, a), ".")[4] {
 		t.Fatal("csrf token must not equal the session signature")
 	}
 }
@@ -335,5 +374,194 @@ func TestLimiterBoundedMemory(t *testing.T) {
 	}
 	if n := l.size(); n > maxTracked {
 		t.Fatalf("limiter grew past its cap: %d", n)
+	}
+}
+
+func TestSessionCarriesTheUserAndTheOwnerFlag(t *testing.T) {
+	m := NewManager(testSecret, nil, newDir())
+	for _, tc := range []struct {
+		id    Identity
+		owner bool
+	}{{ownerID, true}, {aliceID, false}} {
+		s, cookie, err := m.Issue(tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.User != tc.id.User || s.Stamp != tc.id.Stamp || s.Owner != tc.owner {
+			t.Fatalf("issued session = %+v for %+v", s, tc.id)
+		}
+		got, err := m.Verify(cookie.Value)
+		if err != nil || got.User != tc.id.User || got.Owner != tc.owner {
+			t.Fatalf("verified session = %+v, %v", got, err)
+		}
+	}
+}
+
+func TestSessionOfAnUnknownOrChangedUserIsRejected(t *testing.T) {
+	dir := newDir()
+	m := NewManager(testSecret, nil, dir)
+	_, aliceCookie, _ := m.Issue(aliceID)
+	_, bobCookie, _ := m.Issue(bobID)
+	_, ownerCookie, _ := m.Issue(ownerID)
+
+	// A password set changes alice's stamp: only her sessions end.
+	dir.set("alice", "s-alice-2")
+	if _, err := m.Verify(aliceCookie.Value); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("session with an outdated stamp verified: %v", err)
+	}
+	if _, err := m.Verify(bobCookie.Value); err != nil {
+		t.Fatalf("another user's session must survive: %v", err)
+	}
+	// A session issued with the new stamp works.
+	if _, c, _ := m.Issue(Identity{User: "alice", Stamp: "s-alice-2"}); c == nil {
+		t.Fatal("no cookie")
+	} else if _, err := m.Verify(c.Value); err != nil {
+		t.Fatalf("session with the current stamp rejected: %v", err)
+	}
+
+	// Deleting bob ends his sessions, also if the name is created again with a new stamp.
+	dir.set("bob", "")
+	if _, err := m.Verify(bobCookie.Value); err == nil {
+		t.Fatal("session of a deleted user verified")
+	}
+	dir.set("bob", "s-bob-2")
+	if _, err := m.Verify(bobCookie.Value); err == nil {
+		t.Fatal("session of a recreated user verified")
+	}
+
+	// A new owner password changes the owner's stamp.
+	dir.set("root", "s-root-new")
+	if _, err := m.Verify(ownerCookie.Value); err == nil {
+		t.Fatal("owner session verified after the owner's stamp changed")
+	}
+}
+
+func TestSessionsNeedADirectory(t *testing.T) {
+	m := NewManager(testSecret, nil, nil)
+	_, cookie, err := NewManager(testSecret, nil, newDir()).Issue(ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Verify(cookie.Value); err == nil {
+		t.Fatal("a manager without a directory accepted a session")
+	}
+}
+
+// S5: cookies issued before users existed ("<id>.<exp>.<sig>") stop working.
+func TestOldFormatCookieIsRejected(t *testing.T) {
+	clk := newClock()
+	m := NewManager(testSecret, clk.Now, newDir())
+	id := strings.Repeat("a", 32)
+	exp := strconv.FormatInt(clk.Now().Add(time.Hour).Unix(), 10)
+	old := id + "." + exp + "." + m.sign("session", id+"."+exp)
+	if _, err := m.Verify(old); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("old-format cookie verified: %v", err)
+	}
+}
+
+func TestIssueRejectsAnIdentityWithoutUser(t *testing.T) {
+	m := NewManager(testSecret, nil, newDir())
+	if _, _, err := m.Issue(Identity{Stamp: "x"}); err == nil {
+		t.Fatal("Issue accepted an identity without a user")
+	}
+}
+
+type fakeUsers struct {
+	stamps map[string]string
+	pass   map[string]string
+	calls  int
+}
+
+func (f *fakeUsers) Stamp(name string) (string, bool) { s, ok := f.stamps[name]; return s, ok }
+
+func (f *fakeUsers) Authenticate(name, password string) (string, string, bool) {
+	f.calls++
+	name = strings.ToLower(name)
+	want, ok := f.pass[name]
+	return name, f.stamps[name], ok && want == password
+}
+
+func newAccounts(t *testing.T, ownerPassword, fingerprint string, users UserStore) *Accounts {
+	t.Helper()
+	hash, err := bcrypt.GenerateFromPassword([]byte(ownerPassword), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewAccounts("Boss", hash, []byte(fingerprint), testSecret, users)
+}
+
+func TestAccountsAuthenticateTheOwnerAndStoredUsers(t *testing.T) {
+	users := &fakeUsers{stamps: map[string]string{"alice": "s1"}, pass: map[string]string{"alice": "alice password"}}
+	a := newAccounts(t, "owner password", "fp", users)
+
+	id, ok := a.Authenticate("Boss", "owner password")
+	if !ok || id.User != "Boss" || !id.Owner || id.Stamp == "" {
+		t.Fatalf("owner = %+v, %v", id, ok)
+	}
+	if users.calls != 0 {
+		t.Fatal("the owner's sign-in must not consult the store")
+	}
+	id, ok = a.Authenticate("ALICE", "alice password")
+	if !ok || id.User != "alice" || id.Owner || id.Stamp != "s1" {
+		t.Fatalf("stored user = %+v, %v", id, ok)
+	}
+	for _, tc := range [][2]string{
+		{"Boss", "alice password"}, {"boss", "owner password"}, {"alice", "owner password"},
+		{"alice", ""}, {"carol", "alice password"}, {"", "owner password"},
+	} {
+		if _, ok := a.Authenticate(tc[0], tc[1]); ok {
+			t.Errorf("Authenticate(%q, %q) accepted", tc[0], tc[1])
+		}
+	}
+}
+
+func TestAccountsStillCompareForAnUnknownUser(t *testing.T) {
+	users := &fakeUsers{stamps: map[string]string{}, pass: map[string]string{}}
+	a := newAccounts(t, "owner password", "fp", users)
+	a.Authenticate("nobody", "whatever")
+	if users.calls != 1 {
+		t.Fatalf("store consulted %d times for an unknown user, want 1 (it owns the dummy comparison)", users.calls)
+	}
+}
+
+func TestAccountsResolve(t *testing.T) {
+	users := &fakeUsers{stamps: map[string]string{"alice": "s1", "Boss": "shadow"}, pass: map[string]string{}}
+	a := newAccounts(t, "owner password", "fp", users)
+
+	if stamp, owner, ok := a.Resolve("alice"); !ok || owner || stamp != "s1" {
+		t.Fatalf("alice = %q %v %v", stamp, owner, ok)
+	}
+	stamp, owner, ok := a.Resolve("Boss")
+	if !ok || !owner || stamp == "" || stamp == "shadow" {
+		t.Fatalf("the owner must win over a stored entry with the same name: %q %v %v", stamp, owner, ok)
+	}
+	if _, _, ok := a.Resolve("carol"); ok {
+		t.Fatal("unknown user resolved")
+	}
+	if _, _, ok := NewAccounts("Boss", []byte("x"), []byte("fp"), testSecret, nil).Resolve("alice"); ok {
+		t.Fatal("without a store only the owner exists")
+	}
+}
+
+// Changing the owner's password in the stack variables must end its sessions, and nothing else
+// may: the stamp follows the password fingerprint, not the (re-salted) hash.
+func TestOwnerStampFollowsThePasswordFingerprint(t *testing.T) {
+	stamp := func(password, fingerprint string) string {
+		s, _, _ := newAccounts(t, password, fingerprint, nil).Resolve("Boss")
+		return s
+	}
+	a, b := stamp("one", "fp-1"), stamp("one-but-rehashed", "fp-1")
+	if a == "" || a != b {
+		t.Fatalf("same fingerprint, different hash salts: %q vs %q", a, b)
+	}
+	if c := stamp("one", "fp-2"); c == a {
+		t.Fatal("a different fingerprint must change the owner's stamp")
+	}
+	other, _, _ := NewAccounts("Boss", []byte("x"), []byte("fp-1"), []byte(strings.Repeat("z", 32)), nil).Resolve("Boss")
+	if other == a {
+		t.Fatal("the stamp must depend on the session secret")
+	}
+	if strings.Contains(a, "fp-1") {
+		t.Fatal("the stamp leaks the fingerprint")
 	}
 }

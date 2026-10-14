@@ -23,6 +23,7 @@ import (
 
 	"github.com/jorgealonsodev/backsoon/admin/internal/pages"
 	"github.com/jorgealonsodev/backsoon/admin/internal/publish"
+	"github.com/jorgealonsodev/backsoon/admin/internal/users"
 )
 
 const (
@@ -71,6 +72,9 @@ type harness struct {
 	t        *testing.T
 	h        http.Handler
 	store    *pages.Store
+	users    *users.Store
+	hash     []byte // the owner's configured hash
+	trusted  []netip.Prefix
 	pagesDir string
 	metaDir  string
 	clock    *clock
@@ -124,15 +128,41 @@ func buildHarness(t *testing.T, failPub error, trusted []netip.Prefix) *harness 
 	if err != nil {
 		t.Fatal(err)
 	}
+	hn.hash, hn.trusted = hash, trusted
+	hn.users = hn.openUsers()
+	hn.h = hn.newHandler(hash)
+	return hn
+}
+
+// openUsers opens the user store of the harness's meta dir (a panel start).
+func (hn *harness) openUsers() *users.Store {
+	hn.t.Helper()
+	us, err := users.Open(users.Options{MetaDir: hn.metaDir, Owner: testUser, Now: hn.clock.Now, Cost: bcrypt.MinCost})
+	if err != nil {
+		hn.t.Fatal(err)
+	}
+	return us
+}
+
+// newHandler builds a panel handler over the harness's stores with the owner's hash set to hash.
+func (hn *harness) newHandler(hash []byte) http.Handler {
+	hn.t.Helper()
 	h, err := New(Options{
-		Store: store, User: testUser, PasswordHash: hash, SessionSecret: testSecret,
-		Logger: log.New(hn.logs, "", 0), Now: hn.clock.Now, TrustedProxies: trusted,
+		Store: hn.store, Users: hn.users, User: testUser, PasswordHash: hash, SessionSecret: testSecret,
+		Logger: log.New(hn.logs, "", 0), Now: hn.clock.Now, TrustedProxies: hn.trusted,
 	})
 	if err != nil {
-		t.Fatal(err)
+		hn.t.Fatal(err)
 	}
-	hn.h = h
-	return hn
+	return h
+}
+
+// restart simulates a panel restart: the user store is reopened from disk and a new handler built;
+// sessions, being stateless, survive it unless the stores say otherwise.
+func (hn *harness) restart() {
+	hn.t.Helper()
+	hn.users = hn.openUsers()
+	hn.h = hn.newHandler(hn.hash)
 }
 
 func (hn *harness) serve(r *http.Request) *httptest.ResponseRecorder {

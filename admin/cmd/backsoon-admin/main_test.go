@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -274,5 +275,27 @@ func TestHealthcheckUsesTheDefaultPort(t *testing.T) {
 	}
 	if got := healthURL(env(map[string]string{"BACKSOON_ADMIN_LISTEN": "0.0.0.0:9000"})); got != "http://127.0.0.1:9000/healthz" {
 		t.Fatalf("url = %q", got)
+	}
+}
+
+// S2: like sites.json, a corrupt users.json stops the panel with a message instead of starting
+// with users it cannot trust.
+func TestRunRefusesToStartWithACorruptUserFile(t *testing.T) {
+	m := validEnv(t)
+	if err := os.MkdirAll(m["BACKSOON_META_DIR"], 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(m["BACKSOON_META_DIR"], "users.json"), []byte(`{"version":1,"users":[{"name":"Al ice"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr syncBuffer
+	if code := run(context.Background(), nil, env(m), &stdout, &stderr); code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "users.json") {
+		t.Fatalf("stderr = %q, want it to name users.json", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "listening") {
+		t.Fatal("the panel must not start")
 	}
 }

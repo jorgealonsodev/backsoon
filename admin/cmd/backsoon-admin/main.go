@@ -21,6 +21,7 @@ import (
 	"github.com/jorgealonsodev/backsoon/admin/internal/config"
 	"github.com/jorgealonsodev/backsoon/admin/internal/pages"
 	"github.com/jorgealonsodev/backsoon/admin/internal/publish"
+	"github.com/jorgealonsodev/backsoon/admin/internal/users"
 	"github.com/jorgealonsodev/backsoon/admin/internal/web"
 )
 
@@ -74,13 +75,20 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		fmt.Fprintf(stderr, "backsoon-admin: cannot open the page store: %v\n", err)
 		return 1
 	}
+	userStore, err := users.Open(users.Options{MetaDir: cfg.MetaDir, Owner: cfg.User})
+	if err != nil {
+		fmt.Fprintf(stderr, "backsoon-admin: cannot open the user store: %v\n", err)
+		return 1
+	}
 	handler, err := web.New(web.Options{
-		Store:          store,
-		User:           cfg.User,
-		PasswordHash:   cfg.PasswordHash,
-		SessionSecret:  cfg.SessionSecret,
-		Logger:         logger,
-		TrustedProxies: cfg.TrustedProxies,
+		Store:               store,
+		Users:               userStore,
+		User:                cfg.User,
+		PasswordHash:        cfg.PasswordHash,
+		PasswordFingerprint: cfg.PasswordFingerprint,
+		SessionSecret:       cfg.SessionSecret,
+		Logger:              logger,
+		TrustedProxies:      cfg.TrustedProxies,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "backsoon-admin: %v\n", err)

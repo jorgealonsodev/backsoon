@@ -5,6 +5,8 @@
 package config
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -62,6 +64,11 @@ type Config struct {
 	// PlaintextPassword reports that the password was configured in plaintext (EnvPassword, no hash
 	// present), so main can log a warning at startup.
 	PlaintextPassword bool
+	// PasswordFingerprint identifies the configured owner password without revealing it: a keyed
+	// digest of the plaintext password or of the hash, whichever was configured. It is stable
+	// across restarts (a plaintext password is re-hashed with a new salt at every start, so the
+	// hash is not) and changes when the password is changed. The owner's sessions are tied to it.
+	PasswordFingerprint []byte
 	// SessionSecret is the key used to sign sessions.
 	SessionSecret []byte
 	// Refresh is the maintenance refresh interval in seconds (1-99999).
@@ -131,6 +138,7 @@ func loadPassword(cfg *Config, getenv func(string) string) error {
 			return fmt.Errorf("%s is not a valid bcrypt hash", EnvPasswordHash)
 		}
 		cfg.PasswordHash = []byte(hash)
+		cfg.PasswordFingerprint = fingerprint(cfg.SessionSecret, "hash", hash)
 		return nil
 	}
 	password := getenv(EnvPassword)
@@ -144,7 +152,20 @@ func loadPassword(cfg *Config, getenv func(string) string) error {
 	}
 	cfg.PasswordHash = hash
 	cfg.PlaintextPassword = true
+	cfg.PasswordFingerprint = fingerprint(cfg.SessionSecret, "plaintext", password)
 	return nil
+}
+
+// fingerprint is HMAC-SHA256 keyed with the session secret over the kind of credential and its
+// value, so the plaintext and hash forms never collide.
+func fingerprint(secret []byte, kind, value string) []byte {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte("owner-password"))
+	mac.Write([]byte{0})
+	mac.Write([]byte(kind))
+	mac.Write([]byte{0})
+	mac.Write([]byte(value))
+	return mac.Sum(nil)
 }
 
 // ParseRefresh applies the BACKSOON_REFRESH rule shared with

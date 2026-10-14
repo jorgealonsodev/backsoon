@@ -120,14 +120,15 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.renderLogin(w, r, http.StatusTooManyRequests, user, loc.T("login.err.throttled", waitText(loc, wait)))
 		return
 	}
-	if !s.creds.Check(user, r.PostFormValue("password")) {
+	who, ok := s.accounts.Authenticate(user, r.PostFormValue("password"))
+	if !ok {
 		s.log.Printf("login failed ip=%s", ip)
 		s.renderLogin(w, r, http.StatusUnauthorized, user, loc.T("login.err.wrong"))
 		return
 	}
 
 	s.limiter.Success(ip)
-	_, cookie, err := s.sessions.Issue()
+	_, cookie, err := s.sessions.Issue(who)
 	if err != nil {
 		s.log.Printf("login failed to issue a session: %v", err)
 		s.renderLogin(w, r, http.StatusInternalServerError, user, loc.T("login.err.session"))
@@ -135,7 +136,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 	http.SetCookie(w, &http.Cookie{Name: loginCookieName, Path: "/login", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
-	s.log.Printf("login ok user=%q ip=%s", s.user, ip)
+	s.log.Printf("login ok user=%q ip=%s", who.User, ip)
 	setSecurityHeaders(w.Header())
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

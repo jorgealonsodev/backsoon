@@ -40,6 +40,7 @@ type base struct {
 	Style  template.CSS
 	Authed bool
 	Who    string // signed-in user name, shown in the header
+	Owner  bool   // the signed-in user is the owner
 	CSRF   string
 	Notice *noticeView
 
