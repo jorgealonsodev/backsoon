@@ -65,12 +65,17 @@ expect_header() {
   if [ "$_c" = 1 ] && [ "$_v" = "$3" ]; then ok "$1"; else ko "$1" "$2: seen $_c time(s), value [$_v], expected once [$3]"; fi
 }
 
-# expect_maintenance LABEL REFRESH: 503 plus the three maintenance headers, each exactly once.
+# The visitor-facing policy: no script, no external resource, no framing, no form target.
+BACKSOON_CSP="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"
+
+# expect_maintenance LABEL REFRESH: 503 plus the maintenance and security headers, each exactly once.
 expect_maintenance() {
   expect_eq "$1: status 503" 503 "$STATUS"
   expect_header "$1: Retry-After" Retry-After "$2"
   expect_header "$1: Cache-Control" Cache-Control no-store
   expect_header "$1: X-Backsoon" X-Backsoon 1
+  expect_header "$1: Content-Security-Policy" Content-Security-Policy "$BACKSOON_CSP"
+  expect_header "$1: X-Content-Type-Options" X-Content-Type-Options nosniff
 }
 
 # --- Docker ------------------------------------------------------------------

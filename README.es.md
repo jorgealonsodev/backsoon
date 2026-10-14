@@ -38,7 +38,7 @@ docker build -t backsoon:try -f nginx/Dockerfile .
 docker volume create backsoon_try_pages
 docker run --rm -v backsoon_try_pages:/pages --entrypoint sh backsoon:try /docker-entrypoint.d/45-backsoon-seed.sh
 docker run -d --name backsoon-try -v backsoon_try_pages:/pages:ro -p 127.0.0.1:8088:80 backsoon:try
-curl -si http://127.0.0.1:8088/any/path      # 503 + Retry-After + Cache-Control: no-store + X-Backsoon: 1
+curl -si http://127.0.0.1:8088/any/path      # 503 + Retry-After + Cache-Control: no-store + X-Backsoon: 1 + CSP + nosniff
 curl -si -H 'Accept: application/json' http://127.0.0.1:8088/   # 503 + {"status":"maintenance","retry_after":10}
 ```
 
@@ -152,6 +152,7 @@ El panel tiene dos roles.
 | Renderizado de la configuración | `nginx/default.conf.template` lo renderiza el entrypoint oficial. `NGINX_ENVSUBST_FILTER` limita la sustitución a `${BACKSOON_REFRESH}`, de modo que las capturas `${...}` propias de nginx sobreviven. |
 | Ejecución | `worker_processes 1` en `nginx/nginx.conf`; nginx es el único proceso. |
 | Logs | `host target status file` por petición, sin dirección del cliente. Las páginas sin archivo registran el URI del asistente de respuesta vacía. |
+| Cabeceras de seguridad | Toda respuesta de mantenimiento (HTML, JSON, vacía) lleva además `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'` y `X-Content-Type-Options: nosniff`. Las páginas son autocontenidas, así que el navegador del visitante nunca ejecuta un script, carga un recurso externo, incrusta un marco ni envía un formulario desde una página de mantenimiento, contenga lo que contenga el HTML subido; el CSS inline, el SVG inline y las imágenes `data:` siguen funcionando. |
 | Contexto de build | Raíz del repositorio, para que la imagen reutilice `templates/maintenance.html`. |
 
 ## Configuración global de NPM

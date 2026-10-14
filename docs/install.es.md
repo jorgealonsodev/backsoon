@@ -271,7 +271,7 @@ Con la aplicación detenida (o usa la variante segura de abajo):
 
 ```sh
 curl -sI https://app1.example.com
-# HTTP/… 503, Retry-After: 10, Cache-Control: no-store, X-Backsoon: 1 (each exactly once)
+# HTTP/… 503, Retry-After: 10, Cache-Control: no-store, X-Backsoon: 1, Content-Security-Policy, X-Content-Type-Options: nosniff (each exactly once)
 curl -sI -X POST https://app1.example.com                          # 503, not 405
 curl -sI -H 'Accept: application/json' https://app1.example.com    # Content-Type: application/json
 curl -s  -H 'Accept: application/json' https://app1.example.com    # {"status":"maintenance","retry_after":10}

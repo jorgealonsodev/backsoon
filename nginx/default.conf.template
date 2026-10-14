@@ -50,11 +50,15 @@ server {
     # Direct hits on the internal URIs below are answered like any other request.
     error_page 404 =503 /__backsoon;
 
+    # Pages are self-contained (RF-11): the CSP blocks every script, external resource, frame and
+    # form target for visitors, whatever an uploaded page contains.
     location = /__backsoon {
         internal;
         add_header Cache-Control "no-store" always;
         add_header Retry-After ${BACKSOON_REFRESH} always;
         add_header X-Backsoon 1 always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'" always;
+        add_header X-Content-Type-Options nosniff always;
         if ($bs_format = json) { rewrite ^ /__backsoon.json last; }
         # host -> destination -> default; the last URI serves RF-3's empty 503.
         try_files /host/$bs_host.html /target/$bs_target.html /default.html /__backsoon.empty;
@@ -65,6 +69,8 @@ server {
         add_header Cache-Control "no-store" always;
         add_header Retry-After ${BACKSOON_REFRESH} always;
         add_header X-Backsoon 1 always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'" always;
+        add_header X-Content-Type-Options nosniff always;
         default_type application/json;
         return 503 '{"status":"maintenance","retry_after":${BACKSOON_REFRESH}}';
     }
@@ -76,6 +82,8 @@ server {
         add_header Cache-Control "no-store" always;
         add_header Retry-After ${BACKSOON_REFRESH} always;
         add_header X-Backsoon 1 always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'" always;
+        add_header X-Content-Type-Options nosniff always;
         default_type text/html;
         return 200 "";
     }
